@@ -2,6 +2,7 @@
 Move Charm/ITSM Documents from one Solman to another
 
 Following content will be moved:
+
     Soldoc links
     Custom fields (requieres mapping)
     Texts
