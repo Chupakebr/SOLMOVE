@@ -1,18 +1,14 @@
-FUNCTION Z_DOC_CREATE.
+FUNCTION Z_CREATE_DOC .
 *"----------------------------------------------------------------------
 *"*"Local Interface:
 *"  IMPORTING
-*"     VALUE(DOCUMENTPROPS) TYPE  ZITSM_PROPS_T
+*"     VALUE(IS_DOCUMENTPROPS) TYPE  ZDOC_PROPS_STRUCT
 *"  EXPORTING
 *"     VALUE(ET_MESSAGES) TYPE  TDLINE
 *"----------------------------------------------------------------------
 
-call method zcl_solmove_helper=>doc_create
-  exporting
-    iv_documentprops = DOCUMENTPROPS
-    .
+  call method zcl_solmove_helper=>create_doc
+    exporting
+      iv_documentprops = is_documentprops.
 
-
-
-
-ENDFUNCTION.
+endfunction.
