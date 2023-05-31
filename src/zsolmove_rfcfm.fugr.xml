@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<abapGit version="v1.0.0" serializer="LCL_OBJECT_FUGR" serializer_version="v1.0.0">
+ <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+  <asx:values>
+   <AREAT>RFC enabled FM to be called in target</AREAT>
+   <INCLUDES>
+    <SOBJ_NAME>LZSOLMOVE_RFCFMTOP</SOBJ_NAME>
+    <SOBJ_NAME>SAPLZSOLMOVE_RFCFM</SOBJ_NAME>
+   </INCLUDES>
+   <FUNCTIONS>
+    <item>
+     <FUNCNAME>Z_DOC_CREATE</FUNCNAME>
+     <REMOTE_CALL>X</REMOTE_CALL>
+     <SHORT_TEXT>Create CRM document</SHORT_TEXT>
+     <REMOTE_BASXML>X</REMOTE_BASXML>
+     <IMPORT>
+      <RSIMP>
+       <PARAMETER>DOCUMENTPROPS</PARAMETER>
+       <TYP>ZITSM_PROPS_T</TYP>
+      </RSIMP>
+     </IMPORT>
+     <EXPORT>
+      <RSEXP>
+       <PARAMETER>ET_MESSAGES</PARAMETER>
+       <TYP>TDLINE</TYP>
+      </RSEXP>
+     </EXPORT>
+     <DOCUMENTATION>
+      <RSFDO>
+       <PARAMETER>DOCUMENTPROPS</PARAMETER>
+       <KIND>P</KIND>
+       <STEXT>CRM Document structure</STEXT>
+      </RSFDO>
+      <RSFDO>
+       <PARAMETER>ET_MESSAGES</PARAMETER>
+       <KIND>P</KIND>
+       <STEXT>Text Line</STEXT>
+      </RSFDO>
+     </DOCUMENTATION>
+    </item>
+   </FUNCTIONS>
+  </asx:values>
+ </asx:abap>
+</abapGit>
