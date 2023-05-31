@@ -1,5 +1,6 @@
 # SOLMOVE
-Move Charm/ITSM Documents from one Solman to another
+Move Charm/ITSM Documents from one Solman to another instance 
+There will be a new document created, with a new number.
 
 Following content will be moved:
 
