@@ -12,13 +12,21 @@ public section.
       !LT_DOC_PROPERTIES type ZDOC_PROPS_STRUCT
     exceptions
       ERROR_READ_DOC
-      ERROR_GET_ATTACHMENTS .
+      ERROR_GET_ATTACHMENTS
+      ERROR_NO_TARGET_TTYPE .
   class-methods CREATE_DOC
     importing
       !IV_DOCUMENTPROPS type ZDOC_PROPS_STRUCT .
 protected section.
 private section.
 
+  class-methods GET_TYPE
+    importing
+      !IV_TYPE type CRMT_PROCESS_TYPE
+    exporting
+      !EV_TYPE type CRMT_PROCESS_TYPE
+    exceptions
+      ERROR_TYPEMISSING .
   class-methods GET_ATTACHMENTS
     importing
       !IC_1O_API type ref to CL_AGS_CRM_1O_API
@@ -103,7 +111,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
   method get_doc_data.
 
-    data: lo_api_object          type ref to cl_ags_crm_1o_api.
+    data: lo_api_object type ref to cl_ags_crm_1o_api,
+          ls_orderadm_h type crmt_orderadm_h_wrk,
+          lv_type       type crmt_process_type.
 
     call method cl_ags_crm_1o_api=>get_instance
       exporting
@@ -125,12 +135,35 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     endif.
 
 
+    lo_api_object->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
+    lv_type = ls_orderadm_h-process_type.
+
+    call method zcl_solmove_helper=>get_type
+      exporting
+        iv_type           = ls_orderadm_h-process_type
+      importing
+        ev_type           = lt_doc_properties-type
+      exceptions
+        error_typemissing = 1
+        others            = 2.
+
+    if sy-subrc <> 0.
+      message id sy-msgid type sy-msgty number sy-msgno
+      with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+      raising error_no_target_ttype.
+    endif.
+
     call method zcl_solmove_helper=>get_attachments
       exporting
         ic_1o_api          = lo_api_object
       importing
         et_attachment_list = lt_doc_properties-attach_list.
 
+
+  endmethod.
+
+
+  method GET_TYPE.
 
   endmethod.
 ENDCLASS.
