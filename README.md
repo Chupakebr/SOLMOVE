@@ -1,5 +1,5 @@
 # SOLMOVE
-Move Charm/ITSM Documents from one Solman to another instance. 
+Move Charm/ITSM Documents from one Solution Manager 7.2 to another instance of Solution Manager. 
 There will be a new document created, with a new number.
 
 Following content will be moved:
