@@ -25,7 +25,7 @@ Following content will be moved:
 # Instalation
 1) Install abapgit (https://abapgit.org/) in your sorce and target Solution manager
 2) Pull this repository in to your systems (source and target)
-3) Create trusted RFC from source system to the target
+3) Create trusted RFC destanation from source system to the target
 
 # Utilisation
-Run t-code SE38 program ZMOVE in the source system, providing RFC to the target system 
+Run t-code SE38 program ZMOVE in the source system, providing RFC destanation to the target system 
