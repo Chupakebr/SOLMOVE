@@ -25,13 +25,11 @@ data:
   ls_order_data     type ts_order_data,
   lv_total_lines    type i,
   ls_doc_properties type zdoc_props_struct,
-  lt_messages       type table of tdline,
-  ls_messages       type tdline,
-  ls_message        type tdline.
+  ls_messages       type tdline.
 
-select-options p_obj_id for lt_obj_id-obj_id no intervals.
+select-options p_obj_id for lt_obj_id-obj_id no intervals default 8000001915.
 parameters p_rfc    type rfcdwf default 'NONE'.
-"parameters p_type   type crmt_process_type_db.
+parameters p_test as checkbox default 'X'.
 
 start-of-selection.
 
@@ -39,8 +37,7 @@ start-of-selection.
   select business_transaction~object_id,
     business_transaction~guid
     from crmd_orderadm_h as business_transaction
-    where "business_transaction~process_type eq @p_type "and
-           business_transaction~object_id in @p_obj_id
+    where business_transaction~object_id in @p_obj_id
     into table @lt_orders_data.
 
   lv_total_lines = lines( lt_orders_data ).
@@ -48,11 +45,11 @@ start-of-selection.
   if sy-subrc eq 0.
 
     loop at lt_orders_data into ls_order_data.
-      clear: lt_messages.
-      clear: ls_message.
+      clear: ls_messages.
       clear: ls_doc_properties.
 
       "get data to transfer
+
       call method zcl_solmove_helper=>get_doc_data
         exporting
           iv_guid               = ls_order_data-guid
@@ -61,32 +58,35 @@ start-of-selection.
         exceptions
           error_read_doc        = 1
           error_get_attachments = 2
-          others                = 3.
+          error_no_target_ttype = 3
+          others                = 4.
       if sy-subrc <> 0.
         write: / 'Error reading document: '.
         write: ls_order_data-object_id.
+        write: / 'Error id:'.
+        write: sy-subrc.
       else.
 
-        "call RFC to create documnet in target system
-        call function 'Z_CREATE_DOC'
-          destination p_rfc
-          exporting
-            it_documentprops = ls_doc_properties
-          importing
-            et_messages      = lt_messages.
+        if p_test is initial.
 
-        "processing results:
-        if lt_messages is not initial.
-          loop at lt_messages into ls_messages.
-            concatenate 'Document' ls_order_data-object_id 'processed with error:' into ls_message separated by space.
-            write: / ls_message.
-            write: / ls_messages. "Error message
-          endloop.
+          "call RFC to create documnet in target system
+          call function 'Z_CREATE_DOC'
+            destination p_rfc
+            exporting
+              is_documentprops = ls_doc_properties
+            importing
+              et_messages      = ls_messages.
+
+          "processing results:
+           write: / ls_messages. "Processed Message
+
         else.
-          concatenate 'Document' ls_order_data-object_id 'processed sucsessfuly' into ls_message separated by space.
-          write: / ls_message. "Ok Message
+          write: / 'Test read for document: '.
+          write: ls_order_data-object_id.
+          write: 'successful'.
         endif.
       endif.
+
       "indicate process status
       cl_progress_indicator=>progress_indicate(
           i_text               = 'Processed &1 % (&2 of &3 records)'

@@ -29,9 +29,9 @@
     </item>
     <item>
      <ID>S</ID>
-     <KEY>P_TYPE</KEY>
-     <ENTRY>Trunsaction type</ENTRY>
-     <LENGTH>24</LENGTH>
+     <KEY>P_TEST</KEY>
+     <ENTRY>Test (no RFC call to Target)</ENTRY>
+     <LENGTH>36</LENGTH>
     </item>
    </TPOOL>
   </asx:values>

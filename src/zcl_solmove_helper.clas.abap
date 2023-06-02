@@ -16,7 +16,9 @@ public section.
       ERROR_NO_TARGET_TTYPE .
   class-methods CREATE_DOC
     importing
-      !IV_DOCUMENTPROPS type ZDOC_PROPS_STRUCT .
+      !IV_DOCUMENTPROPS type ZDOC_PROPS_STRUCT
+    exporting
+      !EV_MESSAGE type TDLINE .
 protected section.
 private section.
 
@@ -24,9 +26,7 @@ private section.
     importing
       !IV_TYPE type CRMT_PROCESS_TYPE
     exporting
-      !EV_TYPE type CRMT_PROCESS_TYPE
-    exceptions
-      ERROR_TYPEMISSING .
+      !EV_TYPE type CRMT_PROCESS_TYPE .
   class-methods GET_ATTACHMENTS
     importing
       !IC_1O_API type ref to CL_AGS_CRM_1O_API
@@ -44,21 +44,32 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   method create_doc.
 
     include: crm_mode_con. "Include with standard CRM constants
-    data: lo_cd type ref to cl_ags_crm_1o_api. "CRM Document object instance to create and maintain CRM Document through standard API
 
-*    cl_ags_crm_1o_api=>get_instance(
-*    exporting
-*      iv_process_mode = gc_mode-create
-*      iv_process_type = iv_documentprops-type
-*    importing
-*      eo_instance = lo_cd
-*      ).
+    data: lo_cd         type ref to cl_ags_crm_1o_api, "CRM Document object instance to create and maintain CRM Document through standard API
+          lv_log_handle type balloghndl,
+          ls_orderadm_h type crmt_orderadm_h_wrk.
 
-    "Record document and return Solution Manager ID and Solution Manager GUID
-*    lo_cd->save( changing cv_log_handle = lv_log_handle ).
+    cl_ags_crm_1o_api=>get_instance(
+    exporting
+      iv_process_mode = gc_mode-create
+      iv_process_type = iv_documentprops-type
+    importing
+      eo_instance = lo_cd
+      ).
 
-*    lo_cd->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
-*    cdnumber = ls_orderadm_h-object_id.
+    if lo_cd is not bound.
+      ev_message = 'Error: Could not initialize cl_ags_crm_1o_api for creation'.
+      exit.
+    endif.
+
+*   lo_cd->set_customer_h( exporting is_customer_h = ls_customer_h ).
+
+
+*    record document and return solution manager id and solution manager guid
+    lo_cd->save( changing cv_log_handle = lv_log_handle ).
+
+    lo_cd->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
+    concatenate 'Document:' ls_orderadm_h-object_id 'created in target.' into ev_message separated by space.
 
   endmethod.
 
@@ -142,14 +153,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       exporting
         iv_type           = ls_orderadm_h-process_type
       importing
-        ev_type           = lt_doc_properties-type
-      exceptions
-        error_typemissing = 1
-        others            = 2.
+        ev_type           = lt_doc_properties-type.
 
-    if sy-subrc <> 0.
-      message id sy-msgid type sy-msgty number sy-msgno
-      with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+    if lt_doc_properties-type is initial.
+      message text-001 TYPE 'E'
       raising error_no_target_ttype.
     endif.
 
@@ -163,7 +170,12 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
-  method GET_TYPE.
-
+  method get_type.
+    data lv_sorce_type type zsolmove_sorce.
+    lv_sorce_type = iv_type.
+    select single target into @data(lv_type) from zsolmove_mapping
+      where sorce = @lv_sorce_type
+      and TYPE = 'TYPE'.
+    ev_type = lv_type.
   endmethod.
 ENDCLASS.

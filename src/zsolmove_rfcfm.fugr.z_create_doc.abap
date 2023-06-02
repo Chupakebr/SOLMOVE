@@ -9,6 +9,8 @@ FUNCTION Z_CREATE_DOC .
 
   call method zcl_solmove_helper=>create_doc
     exporting
-      iv_documentprops = is_documentprops.
+      iv_documentprops = is_documentprops
+    importing
+      ev_message = ET_MESSAGES.
 
 endfunction.
