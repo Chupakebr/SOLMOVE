@@ -29,5 +29,5 @@ Following content will be moved:
 3) Create trusted RFC destanation from source system to the target
 
 # Utilisation
-Sorce system: In trunsaction SM30 (table ZSOLMOVE_MAPPING) maintain mapping values for fields which requieres mapping
-Sorce system: Run t-code SE38 program ZMOVE, with RFC destanation to the target system 
+1)  Sorce system: In trunsaction SM30 (table ZSOLMOVE_MAPPING) maintain mapping values for fields which requieres mapping
+2)  Sorce system: Run t-code SE38 program ZMOVE, with RFC destanation to the target system 
