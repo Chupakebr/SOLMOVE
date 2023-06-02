@@ -27,7 +27,7 @@ Following content will be moved:
 1) Install abapgit (https://abapgit.org/) in your sorce and target Solution manager
 2) Pull this repository in to your systems (source and target)
 3) Create trusted RFC destanation from source system to the target
-4) In trunsaction SM30 (table ZSOLMOVE_MAPPING) maintain mapping values for fields which requieres mapping
 
 # Utilisation
-Run t-code SE38 program ZMOVE in the source system, providing RFC destanation to the target system 
+Sorce system: In trunsaction SM30 (table ZSOLMOVE_MAPPING) maintain mapping values for fields which requieres mapping
+Sorce system: Run t-code SE38 program ZMOVE, with RFC destanation to the target system 
