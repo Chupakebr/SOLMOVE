@@ -4,10 +4,12 @@ There will be a new document created, with a new number.
 
 Following content will be moved:
 ```diff
++ Description
++ priority
+- Texts (requieres mapping)
 - Soldoc content
 - Custom fields (requieres mapping)
 + TDocument types (requieres mapping)
-- Texts
 - Business Partners (requieres mapping)
 - Dates
 - Cycles (requieres mapping)
@@ -20,7 +22,7 @@ Following content will be moved:
 - Transport
 - Category data
 ? Base Data (crmd_orderadm_h)
-+ priority
+
 - SLA
 ```
 
