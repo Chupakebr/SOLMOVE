@@ -20,7 +20,7 @@ Following content will be moved:
     Transport
     Category data
     ?Base Data (crmd_orderadm_h)
-<span style="color:red">    + priority</span>
+    <span style="color:blue">priority </span>
     SLA
 
 # Instalation
