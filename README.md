@@ -21,9 +21,8 @@ Following content will be moved:
 - Scope
 - Transport
 - Category data
-? Base Data (crmd_orderadm_h)
-
 - SLA
+? Base Data (crmd_orderadm_h)
 ```
 
 # Instalation
