@@ -33,6 +33,12 @@
      <ENTRY>Test (no RFC call to Target)</ENTRY>
      <LENGTH>36</LENGTH>
     </item>
+    <item>
+     <ID>S</ID>
+     <KEY>P_TTYPE</KEY>
+     <ENTRY>Document Type</ENTRY>
+     <LENGTH>21</LENGTH>
+    </item>
    </TPOOL>
   </asx:values>
  </asx:abap>

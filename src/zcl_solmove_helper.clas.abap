@@ -22,6 +22,13 @@ public section.
 protected section.
 private section.
 
+  class-methods SET_ATTACHMENTS
+    importing
+      !IV_ATTACH_LIST type ZITSM_ATTACHMENTS .
+  class-methods SET_STATUS
+    importing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
+      !IV_STATUS type CRM_J_STATUS .
   class-methods GET_TYPE
     importing
       !IV_TYPE type CRMT_PROCESS_TYPE
@@ -47,7 +54,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     data: lo_cd         type ref to cl_ags_crm_1o_api, "CRM Document object instance to create and maintain CRM Document through standard API
           lv_log_handle type balloghndl,
-          ls_orderadm_h type crmt_orderadm_h_wrk.
+          ls_orderadm_h type crmt_orderadm_h_wrk,
+          ls_customer_h type crmt_customer_h_com,
+          lt_status_com type crmt_status_comt.
 
     cl_ags_crm_1o_api=>get_instance(
     exporting
@@ -63,12 +72,27 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     endif.
 
 *   lo_cd->set_customer_h( exporting is_customer_h = ls_customer_h ).
+    "set description
+    lo_cd->set_short_text( exporting iv_short_text = iv_documentprops-description ).
 
+    "set priority
+    if iv_documentprops-priority is not initial.
+      lo_cd->set_priority( exporting iv_priority = iv_documentprops-priority ).
+    endif.
+
+    "set status
+    if iv_documentprops-status is not initial.
+      call method zcl_solmove_helper=>set_status
+        exporting
+          iv_1o_api = lo_cd
+          iv_status = iv_documentprops-status.
+    endif.
 
 *    record document and return solution manager id and solution manager guid
     lo_cd->save( changing cv_log_handle = lv_log_handle ).
 
     lo_cd->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
+
     concatenate 'Document:' ls_orderadm_h-object_id 'created in target.' into ev_message separated by space.
 
   endmethod.
@@ -145,18 +169,40 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         raising error_read_doc.
     endif.
 
-
+    "get defoult data "Priority, description, status
     lo_api_object->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
+    lt_doc_properties-description = ls_orderadm_h-description.
+    lo_api_object->get_priority( importing ev_priority = lt_doc_properties-priority ).
+    lo_api_object->get_status( importing ev_user_status = lt_doc_properties-status ).
+
+    "Evgeny soldoc structure
+    lo_api_object->get_smud_occurrences(
+*      exporting
+*        iv_refresh                    =
+*        iv_with_deleted_nodes         =
+      importing
+        et_smud_occurrences           = data(a)
+        et_smud_occurrences_pending   = data(b)
+        et_smud_occurrences_to_delete = data(c) )
+*      exceptions
+*        error_occurred                = 1
+*        others                        = 2
+            .
+    if sy-subrc <> 0.
+*     Implement suitable error handling here
+    endif.
+
+
     lv_type = ls_orderadm_h-process_type.
 
     call method zcl_solmove_helper=>get_type
       exporting
-        iv_type           = ls_orderadm_h-process_type
+        iv_type = ls_orderadm_h-process_type
       importing
-        ev_type           = lt_doc_properties-type.
+        ev_type = lt_doc_properties-type.
 
     if lt_doc_properties-type is initial.
-      message text-001 TYPE 'E'
+      message text-001 type 'E'
       raising error_no_target_ttype.
     endif.
 
@@ -165,7 +211,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         ic_1o_api          = lo_api_object
       importing
         et_attachment_list = lt_doc_properties-attach_list.
-
 
   endmethod.
 
@@ -177,5 +222,65 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       where sorce = @lv_sorce_type
       and TYPE = 'TYPE'.
     ev_type = lv_type.
+  endmethod.
+
+
+  method SET_ATTACHMENTS.
+  endmethod.
+
+
+  method set_status.
+    data:
+      lv_status_u   type crm_j_status,
+      lt_status_com type crmt_status_comt,
+      ls_status_com type crmt_status_com,
+      lt_status     type crmt_status_wrkt.
+
+*check status
+    iv_1o_api->get_status(
+      importing
+        ev_user_status       = lv_status_u
+        et_status            = lt_status
+      exceptions
+        document_not_found   = 1
+        error_occurred       = 2
+        document_locked      = 3
+        no_change_authority  = 4
+        no_display_authority = 5
+        no_change_allowed    = 6
+        others               = 7
+    ).
+    if sy-subrc <> 0.
+    endif.
+
+    if iv_status <> lv_status_u.
+
+      read table lt_status into data(ls_status) with key status = lv_status_u. "#EC CI_SORTSEQ
+      move-corresponding ls_status to ls_status_com.
+      ls_status_com-status = iv_status.
+
+      ls_status_com-ref_guid       = ls_status-guid.
+      ls_status_com-ref_kind       = 'A'.
+      ls_status_com-activate       = 'X'.
+
+      append ls_status_com to lt_status_com.
+
+      iv_1o_api->set_status(
+        exporting
+          it_status         =     lt_status_com
+        exceptions
+          document_locked   = 1
+          error_occurred    = 2
+          no_authority      = 3
+          no_change_allowed = 4
+          others            = 5
+      ).
+      if sy-subrc <> 0.
+      endif.
+    endif.
+
+
+******************************************
+
   endmethod.
 ENDCLASS.

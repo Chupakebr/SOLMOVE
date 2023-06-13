@@ -44,6 +44,18 @@
      <LANGU>E</LANGU>
      <DESCRIPT>get new document type</DESCRIPT>
     </SEOCOMPOTX>
+    <SEOCOMPOTX>
+     <CLSNAME>ZCL_SOLMOVE_HELPER</CLSNAME>
+     <CMPNAME>SET_ATTACHMENTS</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Add attachmnets to the document</DESCRIPT>
+    </SEOCOMPOTX>
+    <SEOCOMPOTX>
+     <CLSNAME>ZCL_SOLMOVE_HELPER</CLSNAME>
+     <CMPNAME>SET_STATUS</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Set document status</DESCRIPT>
+    </SEOCOMPOTX>
    </DESCRIPTIONS>
   </asx:values>
  </asx:abap>
