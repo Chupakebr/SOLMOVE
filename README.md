@@ -5,7 +5,7 @@ There will be a new document created, with a new number.
 Following content will be moved:
 ```diff
 + Description
-+ priority
++ Priority
 - Texts (requieres mapping)
 - Soldoc content
 - Custom fields (requieres mapping)
