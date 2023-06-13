@@ -7,7 +7,7 @@ Following content will be moved:
 + Transaction types (requieres mapping)
 + Description
 + Priority
-+ Status
++ User Status
 - Texts
 - Soldoc content
 - Custom fields (requieres mapping)
