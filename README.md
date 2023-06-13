@@ -8,7 +8,7 @@ Following content will be moved:
 + Description
 + Priority
 + Status
-- Texts (requieres mapping)
+- Texts
 - Soldoc content
 - Custom fields (requieres mapping)
 - Business Partners (requieres mapping)
