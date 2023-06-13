@@ -4,9 +4,9 @@ There will be a new document created, with a new number.
 
 Following content will be moved:
 ```diff
++ Transaction types (requieres mapping)
 + Description
 + Priority
-+ Transaction types (requieres mapping)
 + Status
 - Texts (requieres mapping)
 - Soldoc content
