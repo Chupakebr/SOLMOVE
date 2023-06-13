@@ -7,6 +7,7 @@ Following content will be moved:
 + Description
 + Priority
 + Transaction types (requieres mapping)
++ Status
 - Texts (requieres mapping)
 - Soldoc content
 - Custom fields (requieres mapping)
@@ -17,7 +18,6 @@ Following content will be moved:
 - Approval procedure
 - Links to other documents (CRM)
 - Attachment
-- Status
 - Scope
 - Transport
 - Category data
