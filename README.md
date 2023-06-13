@@ -6,10 +6,10 @@ Following content will be moved:
 ```diff
 + Description
 + Priority
++ Transaction types (requieres mapping)
 - Texts (requieres mapping)
 - Soldoc content
 - Custom fields (requieres mapping)
-+ TDocument types (requieres mapping)
 - Business Partners (requieres mapping)
 - Dates
 - Cycles (requieres mapping)
