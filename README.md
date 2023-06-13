@@ -11,12 +11,12 @@ Common
 + User Status
 - Texts
 Optional
+- Ibase companents (requieres mapping)
 - Soldoc content
 - Custom fields (requieres mapping)
 - Business Partners (requieres mapping)
 - Dates
 - Cycles (requieres mapping)
-- Ibase companents (requieres mapping)
 - Approval procedure
 - Links to other documents (CRM)
 - Attachment
