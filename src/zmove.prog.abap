@@ -102,43 +102,4 @@ start-of-selection.
     write: lv_total_lines.
     write: ' documents was processed'.
 
-    "smud information
-*    DATA ls_crm               TYPE v_change.
-*    DATA lt_crm               TYPE TABLE OF v_change.
-*    DATA occ_id               TYPE smud_guid22.
-*    SELECT SINGLE * FROM v_change INTO ls_crm WHERE object_id = ls_order_data-object_id.
-
-*    if ls_crm-sbom_id is not initial.
-*      select single occ_id from smud_sbom into occ_id where sbom_id = ls_crm-sbom_id.
-*      if occ_id is not initial.
-*      endif.
-*    endif.
-
-    data ao_sbom_query        type ref to if_smud_sbom_query1.
-    data as_crm         type crmd_orderadm_h.
-    data app_id       type smud_crm_guid.
-    data app_type     type smud_sbom_type.
-    data ao_sbom_h_query      type ref to if_smud_sbom_h_query.
-
-    select single * from crmd_orderadm_h into as_crm where object_id = ls_order_data-object_id.
-
-    if as_crm-guid is not initial.
-      app_id  = as_crm-guid.
-      app_type = cl_smud_sbom_typedef=>cs_sbom_type-cd.
-    endif.
-
-    ao_sbom_query         = cl_smud_sbom_api=>new( )->new_query1( ).
-    ao_sbom_h_query       = cl_smud_sbom_api=>new( )->new_sbom_h_query( ).
-    data(lt_sbom_h) = ao_sbom_h_query->select_sbom_4_app_id(
-        i_app_id     = app_id
-        i_app_type   = app_type ).
-
-
-    loop at lt_sbom_h into data(as_sbom_h).
-      ao_sbom_query->select_occ_of_sbom(
-          exporting
-            iv_sbom_id  = as_sbom_h-sbom_id
-          importing
-            et_occ_id   = data(et_occ_id) ).
-    endloop.
   endif.

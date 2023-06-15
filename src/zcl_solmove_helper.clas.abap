@@ -56,6 +56,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lv_log_handle type balloghndl,
           ls_orderadm_h type crmt_orderadm_h_wrk,
           ls_customer_h type crmt_customer_h_com,
+          lv_smud_occ   type smud_context_occ,
           lt_status_com type crmt_status_comt.
 
     cl_ags_crm_1o_api=>get_instance(
@@ -80,6 +81,24 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lo_cd->set_priority( exporting iv_priority = iv_documentprops-priority ).
     endif.
 
+    "set smud context
+    if iv_documentprops-occ_ids is not initial.
+      loop at iv_documentprops-occ_ids into data(ls_occ_ids).
+        lv_smud_occ(22) = ls_occ_ids.
+
+        lo_cd->set_smud_context_occ(
+                exporting
+                  iv_smud_context_occ = lv_smud_occ
+                  iv_sbom_type        = cl_ags_crm_smud_util=>cs_sbom_type-cd
+                exceptions
+                  invalid_parameters  = 1
+                  others              = 2 ).
+
+        if sy-subrc <> 0.
+        endif.
+      endloop.
+    endif.
+
     "set status
     if iv_documentprops-status is not initial.
       call method zcl_solmove_helper=>set_status
@@ -92,6 +111,11 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     lo_cd->save( changing cv_log_handle = lv_log_handle ).
 
     lo_cd->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
+
+    "get occ_ids
+    lo_cd->get_smud_occurrences(
+      importing
+        et_smud_occurrences = data(lt_smud_occurrences) ).
 
     concatenate 'Document:' ls_orderadm_h-object_id 'created in target.' into ev_message separated by space.
 
@@ -148,7 +172,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     data: lo_api_object type ref to cl_ags_crm_1o_api,
           ls_orderadm_h type crmt_orderadm_h_wrk,
-          lv_type       type crmt_process_type.
+          lv_type       type crmt_process_type,
+          ls_occ_ids    type line of smud_t_guid22,
+          lt_occ_ids    type smud_t_guid22,
+          lt_smud_occurrences type cl_ags_crm_1o_api=>tt_smud_occurrence.
 
     call method cl_ags_crm_1o_api=>get_instance
       exporting
@@ -175,23 +202,19 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     lo_api_object->get_priority( importing ev_priority = lt_doc_properties-priority ).
     lo_api_object->get_status( importing ev_user_status = lt_doc_properties-status ).
 
-    "Evgeny soldoc structure
+    "get occ_ids
     lo_api_object->get_smud_occurrences(
-*      exporting
-*        iv_refresh                    =
-*        iv_with_deleted_nodes         =
       importing
-        et_smud_occurrences           = data(a)
-        et_smud_occurrences_pending   = data(b)
-        et_smud_occurrences_to_delete = data(c) )
-*      exceptions
-*        error_occurred                = 1
-*        others                        = 2
-            .
-    if sy-subrc <> 0.
-*     Implement suitable error handling here
+        et_smud_occurrences = lt_smud_occurrences ).
+
+    IF lt_smud_occurrences is not initial.
+      loop at lt_smud_occurrences into data(ls_smud_ids).
+        ls_occ_ids = ls_smud_ids-occ_id.
+        append ls_occ_ids TO lt_occ_ids.
+      endloop.
     endif.
 
+    lt_doc_properties-occ_ids = lt_occ_ids.
 
     lv_type = ls_orderadm_h-process_type.
 
