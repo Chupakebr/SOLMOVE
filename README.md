@@ -9,6 +9,7 @@ Common
 + Description
 + Priority
 + User Status
++ Attachments
 - Texts
 Optional
 - Ibase companents (requieres mapping)
@@ -19,7 +20,6 @@ Optional
 - Cycles (requieres mapping)
 - Approval procedure
 - Links to other documents (CRM)
-- Attachment
 - Scope
 - Transport
 - Multi level category (requieres mapping)
