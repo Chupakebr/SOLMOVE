@@ -22,7 +22,6 @@ Following content will be moved:
 - Transport
 - Multi level category (requieres mapping)
 - SLA
-? Base Data (crmd_orderadm_h)
 ```
 
 # Instalation
