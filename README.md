@@ -11,7 +11,7 @@ Following content will be moved:
 + Attachments
 + Soldoc content
 - Cycles (requieres mapping)
-- Texts
+- Reach Texts
 - Ibase companents (requieres mapping)
 - Custom fields (requieres mapping)
 - Business Partners (requieres mapping)
