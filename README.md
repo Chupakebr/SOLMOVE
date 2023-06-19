@@ -10,7 +10,7 @@ Following content will be moved:
 + User Status
 + Attachments
 + Soldoc content
-+ Cycles (requieres mapping)
+- Cycles (requieres mapping)
 - Texts
 - Ibase companents (requieres mapping)
 - Custom fields (requieres mapping)
