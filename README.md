@@ -12,7 +12,7 @@ Following content will be moved:
 + Soldoc content
 - Cycles (requieres mapping)
 - Reach Texts
-- Ibase companents (requieres mapping)
+- Ibase components (requieres mapping)
 - Custom fields (requieres mapping)
 - Business Partners (requieres mapping)
 - Dates
