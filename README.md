@@ -4,20 +4,18 @@ There will be a new document created, with a new number.
 
 Following content will be moved:
 ```diff
-Common
 + Transaction types (requieres mapping)
 + Description
 + Priority
 + User Status
 + Attachments
++ Soldoc content
++ Cycles (requieres mapping)
 - Texts
-Optional
 - Ibase companents (requieres mapping)
-- Soldoc content
 - Custom fields (requieres mapping)
 - Business Partners (requieres mapping)
 - Dates
-- Cycles (requieres mapping)
 - Approval procedure
 - Links to other documents (CRM)
 - Scope
