@@ -22,6 +22,27 @@ public section.
 protected section.
 private section.
 
+  class-methods SET_IBASE
+    importing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
+      !IV_GUID type CRMT_OBJECT_GUID
+      !IV_IBASE type COMT_PRODUCT_ID .
+  class-methods GET_IBASE
+    importing
+      !IV_IBASE type COMT_PRODUCT_ID
+    exporting
+      !EV_IBASE type COMT_PRODUCT_ID .
+  class-methods GET_CYCLE
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+    exporting
+      !EV_CYCLE type CRMT_OBJECT_ID_DB .
+  class-methods SET_CYCLE
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+      !IV_TYPE type CRMT_PROCESS_TYPE
+      !IV_CYCLE type CRMT_OBJECT_ID_DB
+      !IV_IBASE type COMT_PRODUCT_ID .
   class-methods SET_ATTACHMENTS
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -105,6 +126,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           iv_status = iv_documentprops-status.
     endif.
 
+    " add attachments
     if iv_documentprops-attach_list is not initial.
       data: lt_object_type type sibftypeid.
       lt_object_type = ls_orderadm_h-object_type.
@@ -116,15 +138,30 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           iv_attach_list = iv_documentprops-attach_list.
     endif.
 
+    "add ibase
+    if iv_documentprops-ibase is not initial.
+      call method zcl_solmove_helper=>set_ibase
+        exporting
+          iv_1o_api = lo_cd
+          iv_guid   = ls_orderadm_h-guid
+          iv_ibase  = iv_documentprops-ibase.
+    endif.
+
+    "add cycle
+    if iv_documentprops-cycle is not initial.
+      call method zcl_solmove_helper=>set_cycle
+        exporting
+          iv_guid  = ls_orderadm_h-guid
+          iv_type  = ls_orderadm_h-process_type
+          iv_ibase = iv_documentprops-ibase
+          iv_cycle = iv_documentprops-cycle.
+    endif.
+
+
 *    record document and return solution manager id and solution manager guid
     lo_cd->save( changing cv_log_handle = lv_log_handle ).
 *     Check if document was ctreated?
     lo_cd->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
-
-    "temp get occ_ids check
-    lo_cd->get_smud_occurrences(
-      importing
-        et_smud_occurrences = data(lt_smud_occurrences) ).
 
     concatenate 'Document:' ls_orderadm_h-object_id 'created in target.' into ev_message separated by space.
 
@@ -177,6 +214,23 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
+  method get_cycle.
+    data lv_sorce type zsolmove_sorce.
+
+    select single release_crm_id into @ev_cycle
+      from tsocm_cr_context as cont
+      left join aic_release_cycl as cycl on cont~project_id = cycl~smi_project
+    where created_guid = @iv_guid and release_crm_id is not null.
+
+    lv_sorce = ev_cycle.
+
+    select single target into @data(lv_target) from zsolmove_mapping where sorce = @lv_sorce and type = 'CYCLE'.
+
+    ev_cycle = lv_target.
+
+  endmethod.
+
+
   method get_doc_data.
 
     data: lo_api_object       type ref to cl_ags_crm_1o_api,
@@ -187,6 +241,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lt_smud_occurrences type cl_ags_crm_1o_api=>tt_smud_occurrence,
           lt_attachment_list  type ags_t_crm_attachment.
 
+    "Get document instance
     call method cl_ags_crm_1o_api=>get_instance
       exporting
         iv_language                   = sy-langu
@@ -203,8 +258,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
         raising error_read_doc.
     endif.
-
-
 
     "get header data
     lo_api_object->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
@@ -223,8 +276,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       raising error_no_target_ttype.
     endif.
 
-    "get Priority, description, status
+    "get Description, Doc. Number, Priority, Status
     lt_doc_properties-description = ls_orderadm_h-description.
+    lt_doc_properties-object_id = ls_orderadm_h-object_id.
     lo_api_object->get_priority( importing ev_priority = lt_doc_properties-priority ).
     lo_api_object->get_status( importing ev_user_status = lt_doc_properties-status ).
 
@@ -242,20 +296,42 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     lt_doc_properties-occ_ids = lt_occ_ids.
 
     " get attachments
-    lo_api_object->get_attachment_list( importing et_attach_list = lt_attachment_list
-"    et_url_list    =
-    ).
+    lo_api_object->get_attachment_list( importing et_attach_list = lt_attachment_list ).
     if lt_attachment_list is not initial.
       call method zcl_solmove_helper=>get_attachments
         exporting
           iv_attachment_list = lt_attachment_list
         importing
           ev_attachments     = lt_doc_properties-attach_list.
-
-
     endif.
 
+    "get i-base
+    lo_api_object->get_ibase( importing es_refobj = data(lv_refobj) ) .
+    if lv_refobj is not initial.
+      call method zcl_solmove_helper=>get_ibase
+        exporting
+          iv_ibase = lv_refobj-product_id
+        importing
+          ev_ibase = lt_doc_properties-ibase.
+    endif.
 
+    " get change cycle
+    call method zcl_solmove_helper=>get_cycle
+      exporting
+        iv_guid  = iv_guid
+      importing
+        ev_cycle = lt_doc_properties-cycle.
+
+  endmethod.
+
+
+  method get_ibase.
+    data lv_sorce_ibase type zsolmove_sorce.
+    lv_sorce_ibase = iv_ibase.
+    select single target into @data(lv_ibase) from zsolmove_mapping
+      where sorce = @lv_sorce_ibase
+      and type = 'IBASE'.
+    ev_ibase = lv_ibase.
   endmethod.
 
 
@@ -329,6 +405,73 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
+  method set_cycle.
+
+    data: ls_cr_context_to type tsocm_cr_context.
+
+    "Get values for cycle
+    select single * from aic_release_cycl into @data(lv_rel)
+    where release_crm_id = @iv_cycle.
+
+    select single * from tsocm_cr_context into @data(lv_context)
+    where guid = @lv_rel-release_crm_guid.
+
+
+    "Set values for cycle
+    ls_cr_context_to-guid = iv_guid.
+    ls_cr_context_to-item_guid = iv_guid.
+    ls_cr_context_to-client = sy-mandt.
+    ls_cr_context_to-process_type = iv_type.
+    ls_cr_context_to-ibase = 0.
+    ls_cr_context_to-ibase_instance = 0.
+    ls_cr_context_to-created_on = 0.
+    ls_cr_context_to-created_guid = iv_guid.
+    ls_cr_context_to-project_id = lv_rel-smi_project.
+    ls_cr_context_to-solution_id = iv_cycle.
+    ls_cr_context_to-slan_id = lv_context-slan_id.
+    ls_cr_context_to-sbra_id = lv_rel-branch_id.
+    ls_cr_context_to-product_id = iv_ibase.
+
+    "modify tsocm_cr_context from ls_cr_context_to.
+    cl_ai_crm_cm_cr_cont_run_btil=>update_cr_context( ls_cr_context_to ).
+
+  endmethod.
+
+
+  method set_ibase.
+
+    data: z_ibase       type ib_ibase,
+          z_product_id  type comt_product_id,
+          is_refobj     type crmt_refobj_com,
+          cv_log_handle type balloghndl,
+          lv_product_id type string.
+
+    is_refobj-ref_guid    = iv_guid.
+    is_refobj-product_id  = iv_ibase.
+    is_refobj-ib_instance = 'z_ibase'. "iv_component.
+    is_refobj-ib_ibase    = '000000000000000001'. "take ibase only from active Ibase
+
+    call method iv_1o_api->set_refobj
+      exporting
+        is_refobj         = is_refobj
+      changing
+        cv_log_handle     = cv_log_handle
+      exceptions
+        document_locked   = 1
+        error_occurred    = 2
+        no_authority      = 3
+        no_change_allowed = 4
+        others            = 5.
+    if sy-subrc <> 0.
+      "cs_cd-error_code = ''.
+      "cs_cd-error_text = ''.
+      "exit.
+    endif.
+
+
+  endmethod.
+
+
   method set_soldoc.
 
     data:
@@ -364,10 +507,11 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
   method set_status.
     data:
-      lv_status_u   type crm_j_status,
-      lt_status_com type crmt_status_comt,
-      ls_status_com type crmt_status_com,
-      lt_status     type crmt_status_wrkt.
+      lv_status_u    type crm_j_status,
+      lt_status_com  type crmt_status_comt,
+      ls_status_com  type crmt_status_com,
+      lt_status      type crmt_status_wrkt,
+      lt_stat_schema type crm_j_stsma.
 
 *check status
     iv_1o_api->get_status(
