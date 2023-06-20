@@ -12,16 +12,16 @@ Following content will be moved:
 + Soldoc content
 + Cycles (requieres mapping)
 + Ibase component (requieres mapping)
-- Reach Texts
 - Custom fields (requieres mapping)
-- Business Partners (requieres mapping)
+- SLA
 - Dates
 - Approval procedure
 - Links to other documents (CRM)
 - Scope
 - Transport
 - Multi level category (requieres mapping)
-- SLA
+- Reach Texts
+- Business Partners (requieres mapping)
 ```
 
 # Instalation
