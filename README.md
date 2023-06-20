@@ -10,9 +10,9 @@ Following content will be moved:
 + User Status
 + Attachments
 + Soldoc content
-- Cycles (requieres mapping)
++ Cycles (requieres mapping)
++ Ibase component (requieres mapping)
 - Reach Texts
-- Ibase components (requieres mapping)
 - Custom fields (requieres mapping)
 - Business Partners (requieres mapping)
 - Dates
