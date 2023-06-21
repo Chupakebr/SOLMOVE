@@ -1,10 +1,10 @@
 # SOLMOVE
 Move Charm/ITSM Documents from one Solution Manager 7.2 to another instance of Solution Manager. 
-There will be a new document created, with a new number.
+There will be a new document created with a new number.
 
-Following content will be moved:
+The following content will be moved:
 ```diff
-+ Transaction types (requieres mapping)
++ Transaction types (requires mapping)
 + Description
 + Priority
 ! User Status
@@ -12,23 +12,23 @@ Following content will be moved:
 + Soldoc content
 + Cycles (requieres mapping)
 + Ibase component (requieres mapping)
-- Custom fields (requieres mapping)
+- Custom fields from CUSTOMER_H (requires mapping)
 - SLA
 - Dates
 - Approval procedure
 - Links to other documents (CRM)
 - Scope
 - Transport
-- Multi level category (requieres mapping)
+- Multi-level category (requires mapping)
 - Reach Texts
-- Business Partners (requieres mapping)
+- Business Partners (requires mapping)
 ```
 
 # Instalation
-1) Install abapgit (https://abapgit.org/) in your sorce and target Solution manager
-2) Pull this repository in to your systems (source and target)
-3) Create trusted RFC destanation from source system to the target
+1) Install abapgit (https://abapgit.org/) in your source and target Solution manager
+2) Pull this repository into your systems (source and target)
+3) Create a trusted RFC destination from the source system to the target
 
 # Utilisation
-1)  Sorce system: In trunsaction SM30 (table ZSOLMOVE_MAPPING) maintain mapping values for the fields which requieres mapping
-2)  Sorce system: Run t-code SE38 program ZMOVE, with RFC destanation to the target system 
+1)  Sorce system: In transaction, SM30 (table ZSOLMOVE_MAPPING), maintain mapping values for the fields which require mapping
+2)  Sorce system: Run t-code SE38 program ZMOVE, with RFC destination to the target system 
