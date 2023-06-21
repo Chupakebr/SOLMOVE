@@ -11,7 +11,7 @@ Following content will be moved:
 + Attachments
 + Soldoc content
 + Cycles (requieres mapping)
-! Ibase component (requieres mapping)
++ Ibase component (requieres mapping)
 - Custom fields (requieres mapping)
 - SLA
 - Dates
