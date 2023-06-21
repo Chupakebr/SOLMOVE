@@ -22,11 +22,21 @@ public section.
 protected section.
 private section.
 
+  class-methods GET_WEBUI_FIELDS
+    importing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API .
+  class-methods SET_WEBUI_FIELDS
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+      !IV_WEB_FIELDS type I
+    changing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API .
   class-methods SET_IBASE
     importing
-      !IV_1O_API type ref to CL_AGS_CRM_1O_API
       !IV_GUID type CRMT_OBJECT_GUID
-      !IV_IBASE type COMT_PRODUCT_ID .
+      !IV_IBASE type COMT_PRODUCT_ID
+    changing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API .
   class-methods GET_IBASE
     importing
       !IV_IBASE type COMT_PRODUCT_ID
@@ -56,8 +66,10 @@ private section.
       !IV_SMUD_T type SMUD_T_GUID22 .
   class-methods SET_STATUS
     importing
-      !IV_1O_API type ref to CL_AGS_CRM_1O_API
-      !IV_STATUS type CRM_J_STATUS .
+      !IV_STATUS type CRM_J_STATUS
+      !IV_SYST_STATUS type CRM_J_STATUS
+    changing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API .
   class-methods GET_TYPE
     importing
       !IV_TYPE type CRMT_PROCESS_TYPE
@@ -122,8 +134,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     if iv_documentprops-status is not initial.
       call method zcl_solmove_helper=>set_status
         exporting
-          iv_1o_api = lo_cd
-          iv_status = iv_documentprops-status.
+          iv_status      = iv_documentprops-status
+          iv_syst_status = iv_documentprops-sys_status
+        changing
+          iv_1o_api      = lo_cd.
     endif.
 
     " add attachments
@@ -142,9 +156,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     if iv_documentprops-ibase is not initial.
       call method zcl_solmove_helper=>set_ibase
         exporting
-          iv_1o_api = lo_cd
           iv_guid   = ls_orderadm_h-guid
-          iv_ibase  = iv_documentprops-ibase.
+          iv_ibase  = iv_documentprops-ibase
+        changing
+          iv_1o_api = lo_cd.
     endif.
 
     "add cycle
@@ -160,9 +175,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 *    record document and return solution manager id and solution manager guid
     lo_cd->save( changing cv_log_handle = lv_log_handle ).
-*     Check if document was ctreated?
-    lo_cd->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
 
+*    Check if document was ctreated?
+    lo_cd->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
     concatenate 'Document:' ls_orderadm_h-object_id 'created in target.' into ev_message separated by space.
 
   endmethod.
@@ -280,7 +295,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     lt_doc_properties-description = ls_orderadm_h-description.
     lt_doc_properties-object_id = ls_orderadm_h-object_id.
     lo_api_object->get_priority( importing ev_priority = lt_doc_properties-priority ).
-    lo_api_object->get_status( importing ev_user_status = lt_doc_properties-status ).
+    lo_api_object->get_status( importing ev_user_status = lt_doc_properties-status ). "user status
+
+    select single stat from crm_jest into (@lt_doc_properties-sys_status) "system status
+    where stat like 'I%' and inact = '' and objnr = @ls_orderadm_h-guid.
 
     "get occ_ids
     lo_api_object->get_smud_occurrences(
@@ -342,6 +360,30 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       where sorce = @lv_sorce_type
       and TYPE = 'TYPE'.
     ev_type = lv_type.
+  endmethod.
+
+
+  method get_webui_fields.
+
+    data: ls_customer_h type crmt_customer_h_wrk.
+
+    iv_1o_api->get_customer_h( importing
+        es_customer_h        = ls_customer_h
+*       et_customer_h        =
+*      exceptions
+*        document_not_found   = 1
+*        error_occurred       = 2
+*        document_locked      = 3
+*        no_change_authority  = 4
+*        no_display_authority = 5
+*        no_change_allowed    = 6
+*        others               = 7
+    ).
+    if sy-subrc <> 0.
+*     Implement suitable error handling here
+    endif.
+
+
   endmethod.
 
 
@@ -440,16 +482,60 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
   method set_ibase.
 
-    data: z_ibase       type ib_ibase,
-          z_product_id  type comt_product_id,
-          is_refobj     type crmt_refobj_com,
-          cv_log_handle type balloghndl,
-          lv_product_id type string.
+    data: z_ibase               type ib_ibase,
+          z_product_id          type comt_product_id,
+          is_refobj             type crmt_refobj_com,
+          cv_log_handle         type balloghndl,
+          lv_product_id         type string,
+          lv_search_comp_detail type ibap_comp1,
+          lv_found_comp_detail  type ibap_dat1,
+          lv_comp_detail        type ibap_comp2.
+
+
+    select product_guid into @data(lv_p_guid16) from comm_product where product_id = @iv_ibase.
+
+      lv_search_comp_detail-object_guid = lv_p_guid16.
+
+      call function 'CRM_IBASE_COMP_FIND'
+        exporting
+          i_comp_det        = lv_search_comp_detail
+*         I_DATE            =
+*         I_TIME            =
+*         IV_INCLUDE_VOID   =
+        importing
+          e_comp            = lv_found_comp_detail
+        exceptions
+          not_found         = 1
+          several_instances = 2
+          others            = 3.
+      if sy-subrc <> 0.
+        continue.  "with next entry
+      endif.
+
+*      call function 'CRM_IBASE_COMP_GET_DETAIL'
+*        exporting
+*          i_comp        = lv_found_comp_detail
+**         I_DATE        =
+**         I_TIME        =
+**         IV_DO_AUTH_CHECK       =
+*        importing
+*          e_comp_det    = lv_comp_detail
+**       TABLES
+**         ET_STATUS     =
+*        exceptions
+*          not_specified = 1
+*          doesnt_exist  = 2
+*          no_authority  = 3
+*          others        = 4.
+*      if sy-subrc <> 0.
+*        continue.  "with next entry
+*      endif.
+    endselect.
 
     is_refobj-ref_guid    = iv_guid.
     is_refobj-product_id  = iv_ibase.
-    is_refobj-ib_instance = 'z_ibase'. "iv_component.
-    is_refobj-ib_ibase    = '000000000000000001'. "take ibase only from active Ibase
+    is_refobj-ib_instance = lv_found_comp_detail-ibase.
+    is_refobj-ib_ibase    = lv_found_comp_detail-instance.
 
     call method iv_1o_api->set_refobj
       exporting
@@ -513,6 +599,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lt_status      type crmt_status_wrkt,
       lt_stat_schema type crm_j_stsma.
 
+    data: ls_status_int         type jstat.
+    data: lt_status_int         type standard table of jstat.
+
 *check status
     iv_1o_api->get_status(
       importing
@@ -530,7 +619,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     if sy-subrc <> 0.
     endif.
 
-    if iv_status <> lv_status_u.
+    if iv_status <> lv_status_u. "user status
 
       read table lt_status into data(ls_status) with key status = lv_status_u. "#EC CI_SORTSEQ
       move-corresponding ls_status to ls_status_com.
@@ -554,10 +643,54 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       ).
       if sy-subrc <> 0.
       endif.
+
+      "system status
+      read table lt_status into data(ls_status_sys) with key user_stat_proc = ''. "#EC CI_SORTSEQ
+      move-corresponding ls_status_sys to ls_status_com.
+      if ls_status_com-status <> iv_syst_status.
+
+        ls_status_int-inact = space.
+        ls_status_int-stat  = iv_syst_status.
+        append ls_status_int to lt_status_int.
+
+        ls_status_int-inact = 'X'.
+        ls_status_int-stat  = ls_status_com-status.
+        append ls_status_int to lt_status_int.
+
+
+        call function 'CRM_STATUS_CHANGE_INTERN'
+          exporting
+            objnr               = ls_status-guid
+          tables
+            status              = lt_status_int
+          exceptions
+            object_not_found    = 1
+            status_inconsistent = 2
+            status_not_allowed  = 3.
+        if sy-subrc <> 0.
+* Implement suitable error handling here
+        endif.
+      endif.
+
     endif.
 
+  endmethod.
 
-******************************************
+
+  method set_webui_fields.
+    "Record Customer_h fields
+    data: ls_customer_h type crmt_customer_h_com.
+
+    ls_customer_h-ref_guid = iv_guid.
+
+*    ls_customer_h-zzsnownumber = cs_cd-snownumber.
+*    ls_customer_h-zzsnowsysid = cs_cd-snowsysid.
+*    ls_customer_h-zzsnowrecnumber = cs_cd-snowrecordnumber.
+*    ls_customer_h-zzsnowgroup = cs_cd-snowgroup.
+*    ls_customer_h-zzsnowassigngrp = cs_cd-snowassignmentgroup.
+
+    iv_1o_api->set_customer_h( exporting is_customer_h = ls_customer_h ).
+
 
   endmethod.
 ENDCLASS.
