@@ -54,6 +54,13 @@
      <DOMVALUE_L>CAT</DOMVALUE_L>
      <DDTEXT>Category</DDTEXT>
     </DD07V>
+    <DD07V>
+     <DOMNAME>ZSOLMOVE_MAPPING</DOMNAME>
+     <VALPOS>0007</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>ID</DOMVALUE_L>
+     <DDTEXT>Original ID of the document</DDTEXT>
+    </DD07V>
    </DD07V_TAB>
   </asx:values>
  </asx:abap>

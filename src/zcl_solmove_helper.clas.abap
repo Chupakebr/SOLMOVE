@@ -24,11 +24,12 @@ private section.
 
   class-methods GET_WEBUI_FIELDS
     importing
-      !IV_1O_API type ref to CL_AGS_CRM_1O_API .
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
+    exporting
+      !EV_CUSTOM_FIELDS type ZCUSTOM_FIELDS_TT .
   class-methods SET_WEBUI_FIELDS
     importing
-      !IV_GUID type CRMT_OBJECT_GUID
-      !IV_WEB_FIELDS type I
+      !EV_CUSTOM_FIELDS type ZCUSTOM_FIELDS_TT
     changing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API .
   class-methods SET_IBASE
@@ -170,6 +171,15 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           iv_type  = ls_orderadm_h-process_type
           iv_ibase = iv_documentprops-ibase
           iv_cycle = iv_documentprops-cycle.
+    endif.
+
+    "add webui fields
+    if iv_documentprops-custom_fields is not initial.
+      call method zcl_solmove_helper=>set_webui_fields
+        exporting
+          ev_custom_fields = iv_documentprops-custom_fields
+        changing
+          iv_1o_api        = lo_cd.
     endif.
 
 
@@ -339,6 +349,14 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         iv_guid  = iv_guid
       importing
         ev_cycle = lt_doc_properties-cycle.
+
+    " get custom fields for WEB UI
+    call method zcl_solmove_helper=>get_webui_fields
+      exporting
+        iv_1o_api        = lo_api_object
+      importing
+        ev_custom_fields = lt_doc_properties-custom_fields.
+
 
   endmethod.
 
@@ -680,9 +698,25 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   method set_webui_fields.
     "Record Customer_h fields
     data: ls_customer_h type crmt_customer_h_com.
+    data: ls_customer_h_old type crmt_customer_h_wrk.
 
-    ls_customer_h-ref_guid = iv_guid.
+    iv_1o_api->get_customer_h( importing
+        es_customer_h        = ls_customer_h_old
+*       et_customer_h        =
+*      exceptions
+*        document_not_found   = 1
+*        error_occurred       = 2
+*        document_locked      = 3
+*        no_change_authority  = 4
+*        no_display_authority = 5
+*        no_change_allowed    = 6
+*        others               = 7
+    ).
+    if sy-subrc <> 0.
+*     Implement suitable error handling here
+    endif.
 
+    ls_customer_h-ref_guid = ls_customer_h_old-guid.
 *    ls_customer_h-zzsnownumber = cs_cd-snownumber.
 *    ls_customer_h-zzsnowsysid = cs_cd-snowsysid.
 *    ls_customer_h-zzsnowrecnumber = cs_cd-snowrecordnumber.
