@@ -12,13 +12,14 @@ The following content will be moved:
 + Soldoc content
 + Cycles (requieres mapping)
 + Ibase component (requieres mapping)
-- Custom fields from CUSTOMER_H (requires mapping)
+
 - SLA
 - Dates
 - Approval procedure
 - Links to other documents (CRM)
 - Scope
 - Transport
+- Custom fields from CUSTOMER_H (requires mapping)
 - Multi-level category (requires mapping)
 - Reach Texts
 - Business Partners (requires mapping)
