@@ -22,7 +22,7 @@
      <EXPORT>
       <RSEXP>
        <PARAMETER>ET_MESSAGES</PARAMETER>
-       <TYP>TDLINE</TYP>
+       <TYP>ZPROCESS_LOG_TT</TYP>
       </RSEXP>
      </EXPORT>
      <DOCUMENTATION>
@@ -34,7 +34,7 @@
       <RSFDO>
        <PARAMETER>ET_MESSAGES</PARAMETER>
        <KIND>P</KIND>
-       <STEXT>Text Line</STEXT>
+       <STEXT>Text Lines log</STEXT>
       </RSFDO>
      </DOCUMENTATION>
     </item>

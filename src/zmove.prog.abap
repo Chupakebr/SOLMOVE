@@ -25,7 +25,8 @@ data:
   ls_order_data     type ts_order_data,
   lv_total_lines    type i,
   ls_doc_properties type zdoc_props_struct,
-  ls_messages       type tdline.
+  lt_messages       type zprocess_log_tt,
+  ls_message        type tdline.
 
 select-options p_obj_id for lt_obj_id-obj_id no intervals default 8000000060.
 parameters p_rfc    type rfcdwf default 'NONE'.
@@ -47,7 +48,7 @@ start-of-selection.
   if sy-subrc eq 0.
 
     loop at lt_orders_data into ls_order_data.
-      clear: ls_messages.
+      clear: lt_messages.
       clear: ls_doc_properties.
 
       "get data to transfer
@@ -77,10 +78,12 @@ start-of-selection.
             exporting
               is_documentprops = ls_doc_properties
             importing
-              et_messages      = ls_messages.
+              et_messages      = lt_messages.
 
-          "processing results:
-          write: / ls_messages. "Processed Message
+          loop at lt_messages into ls_message.
+            "processing results:
+            write: / ls_message. "Processed Message
+          endloop.
 
         else.
           write: / 'Test read for document: '.

@@ -18,7 +18,7 @@ public section.
     importing
       !IV_DOCUMENTPROPS type ZDOC_PROPS_STRUCT
     exporting
-      !EV_MESSAGE type TDLINE .
+      !EV_MESSAGE type ZPROCESS_LOG_TT .
 protected section.
 private section.
 
@@ -31,7 +31,9 @@ private section.
     importing
       !EV_CUSTOM_FIELDS type ZCUSTOM_FIELDS_TT
     changing
-      !IV_1O_API type ref to CL_AGS_CRM_1O_API .
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
+    exceptions
+      ERROR_CUSTOMER_HEADER .
   class-methods SET_IBASE
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -96,7 +98,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lv_log_handle type balloghndl,
           ls_orderadm_h type crmt_orderadm_h_wrk,
           ls_customer_h type crmt_customer_h_com,
-          lt_status_com type crmt_status_comt.
+          lt_status_com type crmt_status_comt,
+          lv_message    type tdline.
 
     "Create document
     cl_ags_crm_1o_api=>get_instance(
@@ -108,7 +111,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       ).
 
     if lo_cd is not bound.
-      ev_message = 'Error: Could not initialize cl_ags_crm_1o_api for creation'.
+      lv_message = 'Error: Could not initialize cl_ags_crm_1o_api for creation'.
+      append lv_message to ev_message.
       exit.
     endif.
     "get guid of the created document
@@ -176,18 +180,26 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     if iv_documentprops-custom_fields is not initial.
       call method zcl_solmove_helper=>set_webui_fields
         exporting
-          ev_custom_fields = iv_documentprops-custom_fields
+          ev_custom_fields      = iv_documentprops-custom_fields
         changing
-          iv_1o_api        = lo_cd.
-    endif.
+          iv_1o_api             = lo_cd
+        exceptions
+          error_customer_header = 1
+          others                = 2.
+      if sy-subrc <> 0.
+        lv_message = 'Error: Could not set document webui fields'.
+        append lv_message to ev_message.
+      endif.
 
+    endif.
 
 *    record document and return solution manager id and solution manager guid
     lo_cd->save( changing cv_log_handle = lv_log_handle ).
 
 *    Check if document was ctreated?
     lo_cd->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
-    concatenate 'Document:' ls_orderadm_h-object_id 'created in target.' into ev_message separated by space.
+    concatenate 'Document:' ls_orderadm_h-object_id 'created in target.' into lv_message separated by space.
+    append lv_message to ev_message.
 
   endmethod.
 
@@ -725,6 +737,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     "Record Customer_h fields
     data: ls_customer_h type crmt_customer_h_com.
+    data: ls_orderadm_h  type crmt_orderadm_h_wrk.
     data: ls_customer_h_old type crmt_customer_h_wrk.
     data: ls_fields type zcustom_fields.
     data: fldname type fieldname.
@@ -733,8 +746,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     <fld> type any.
 
     iv_1o_api->get_customer_h( importing es_customer_h = ls_customer_h_old ).
+    iv_1o_api->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
 
-    ls_customer_h-ref_guid = ls_customer_h_old-guid.
+    ls_customer_h-ref_guid = ls_orderadm_h-guid.
 
     loop at ev_custom_fields into ls_fields.
       if ls_fields-target_table = 'CUSTOMER_H'.
@@ -746,8 +760,18 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       endif.
     endloop.
 
-    iv_1o_api->set_customer_h( exporting is_customer_h = ls_customer_h ).
-
+    iv_1o_api->set_customer_h( exporting is_customer_h = ls_customer_h
+      exceptions
+        error_occurred    = 1
+        document_locked   = 2
+        no_change_allowed = 3
+        no_authority      = 4
+        others            = 5 ).
+    if sy-subrc <> 0.
+      message id sy-msgid type sy-msgty number sy-msgno
+        with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+        raising error_customer_header.
+    endif.
 
   endmethod.
 ENDCLASS.
