@@ -22,6 +22,11 @@ public section.
 protected section.
 private section.
 
+  class-methods GET_STATUS
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+    exporting
+      !EV_STATUS type ZSTATUS_TT .
   class-methods GET_WEBUI_FIELDS
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
@@ -69,8 +74,7 @@ private section.
       !IV_SMUD_T type SMUD_T_GUID22 .
   class-methods SET_STATUS
     importing
-      !IV_STATUS type CRM_J_STATUS
-      !IV_SYST_STATUS type CRM_J_STATUS
+      !IV_STATUS type ZSTATUS_TT
     changing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API .
   class-methods GET_TYPE
@@ -134,16 +138,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           iv_smud_t = iv_documentprops-occ_ids.
     endif.
 
-    "set status
-    if iv_documentprops-status is not initial.
-      call method zcl_solmove_helper=>set_status
-        exporting
-          iv_status      = iv_documentprops-status
-          iv_syst_status = iv_documentprops-sys_status
-        changing
-          iv_1o_api      = lo_cd.
-    endif.
-
     " add attachments
     if iv_documentprops-attach_list is not initial.
       data: lt_object_type type sibftypeid.
@@ -190,8 +184,19 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         lv_message = 'Error: Could not set document webui fields'.
         append lv_message to ev_message.
       endif.
-
     endif.
+
+
+    "set status
+    " !status set should be the last action to allow other changes for closed document!
+    if iv_documentprops-status is not initial.
+      call method zcl_solmove_helper=>set_status
+        exporting
+          iv_status      = iv_documentprops-status
+        changing
+          iv_1o_api      = lo_cd.
+    endif.
+    " !status set should be the last action to allow other changes for closed document!
 
 *    record document and return solution manager id and solution manager guid
     lo_cd->save( changing cv_log_handle = lv_log_handle ).
@@ -274,6 +279,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lv_type             type crmt_process_type,
           ls_occ_ids          type line of smud_t_guid22,
           lt_occ_ids          type smud_t_guid22,
+          ls_status           type crmt_status_wrkt,
           lt_smud_occurrences type cl_ags_crm_1o_api=>tt_smud_occurrence,
           lt_attachment_list  type ags_t_crm_attachment.
 
@@ -317,10 +323,15 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     lt_doc_properties-object_id = ls_orderadm_h-object_id. "to be removed (moved to get WebUI fields)
     lt_doc_properties-created_at = ls_orderadm_h-created_at.
     lo_api_object->get_priority( importing ev_priority = lt_doc_properties-priority ).
-    lo_api_object->get_status( importing ev_user_status = lt_doc_properties-status ). "user status
 
-    select single stat from crm_jest into (@lt_doc_properties-sys_status) "system status
-    where stat like 'I%' and inact = '' and objnr = @ls_orderadm_h-guid.
+    "get all statuses of the document
+    call method zcl_solmove_helper=>get_status
+      exporting
+        iv_guid = iv_guid
+      importing
+       ev_status = lt_doc_properties-status.
+      .
+
 
     "get occ_ids
     lo_api_object->get_smud_occurrences(
@@ -380,6 +391,17 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       where sorce = @lv_sorce_ibase
       and type = 'IBASE'.
     ev_ibase = lv_ibase.
+  endmethod.
+
+
+  method get_status.
+    data lv_stat type crm_j_status.
+
+    select stat from crm_jest into (@lv_stat) "system status
+    where inact = '' and objnr = @iv_guid.
+      append lv_stat to ev_status.
+    endselect.
+
   endmethod.
 
 
@@ -650,6 +672,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   method set_status.
     data:
       lv_status_u    type crm_j_status,
+      lv_status_c    type crm_j_status,
       lt_status_com  type crmt_status_comt,
       ls_status_com  type crmt_status_com,
       lt_status      type crmt_status_wrkt,
@@ -675,59 +698,66 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     if sy-subrc <> 0.
     endif.
 
-    if iv_status <> lv_status_u. "user status
+    read table lt_status into data(ls_status) with key status = lv_status_u. "#EC CI_SORTSEQ
+    move-corresponding ls_status to ls_status_com.
 
-      read table lt_status into data(ls_status) with key status = lv_status_u. "#EC CI_SORTSEQ
-      move-corresponding ls_status to ls_status_com.
-      ls_status_com-status = iv_status.
+    loop at iv_status into lv_status_c.
+      if lv_status_c(1) = 'E'. "set user statuses
+        if lv_status_c <> lv_status_u.
+          ls_status_com-status = lv_status_c.
 
-      ls_status_com-ref_guid       = ls_status-guid.
-      ls_status_com-ref_kind       = 'A'.
-      ls_status_com-activate       = 'X'.
+          ls_status_com-ref_guid       = ls_status-guid.
+          ls_status_com-ref_kind       = 'A'.
+          ls_status_com-activate       = 'X'.
 
-      append ls_status_com to lt_status_com.
+          append ls_status_com to lt_status_com.
 
-      iv_1o_api->set_status(
-        exporting
-          it_status         =     lt_status_com
-        exceptions
-          document_locked   = 1
-          error_occurred    = 2
-          no_authority      = 3
-          no_change_allowed = 4
-          others            = 5
-      ).
-      if sy-subrc <> 0.
-      endif.
+        endif.
+      else."set system status
+        read table lt_status into data(ls_status_sys) with key user_stat_proc = ''. "#EC CI_SORTSEQ
+        move-corresponding ls_status_sys to ls_status_com.
+        if lv_status_c <> ls_status_com-status.
 
-      "system status
-      read table lt_status into data(ls_status_sys) with key user_stat_proc = ''. "#EC CI_SORTSEQ
-      move-corresponding ls_status_sys to ls_status_com.
-      if ls_status_com-status <> iv_syst_status.
+          ls_status_int-inact = space.
+          ls_status_int-stat  = lv_status_c.
+          append ls_status_int to lt_status_int.
 
-        ls_status_int-inact = space.
-        ls_status_int-stat  = iv_syst_status.
-        append ls_status_int to lt_status_int.
+*          ls_status_int-inact = 'X'.
+*          ls_status_int-stat  = ls_status_com-status.
+*          append ls_status_int to lt_status_int.
 
-        ls_status_int-inact = 'X'.
-        ls_status_int-stat  = ls_status_com-status.
-        append ls_status_int to lt_status_int.
-
-
-        call function 'CRM_STATUS_CHANGE_INTERN'
-          exporting
-            objnr               = ls_status-guid
-          tables
-            status              = lt_status_int
-          exceptions
-            object_not_found    = 1
-            status_inconsistent = 2
-            status_not_allowed  = 3.
-        if sy-subrc <> 0.
-* Implement suitable error handling here
         endif.
       endif.
+    endloop.
 
+    if lt_status_com is not initial.
+      iv_1o_api->set_status(
+            exporting
+              it_status         =     lt_status_com
+            exceptions
+              document_locked   = 1
+              error_occurred    = 2
+              no_authority      = 3
+              no_change_allowed = 4
+              others            = 5
+          ).
+      if sy-subrc <> 0.
+      endif.
+    endif.
+
+    if lt_status_int is not initial.
+      call function 'CRM_STATUS_CHANGE_INTERN'
+        exporting
+          objnr               = ls_status-guid
+        tables
+          status              = lt_status_int
+        exceptions
+          object_not_found    = 1
+          status_inconsistent = 2
+          status_not_allowed  = 3.
+      if sy-subrc <> 0.
+* Implement suitable error handling here
+      endif.
     endif.
 
   endmethod.
