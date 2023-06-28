@@ -111,8 +111,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       ev_message = 'Error: Could not initialize cl_ags_crm_1o_api for creation'.
       exit.
     endif.
+    "get guid of the created document
+    lo_cd->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
 
-*   lo_cd->set_customer_h( exporting is_customer_h = ls_customer_h ).
     "set description
     lo_cd->set_short_text( exporting iv_short_text = iv_documentprops-description ).
 
@@ -120,8 +121,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     if iv_documentprops-priority is not initial.
       lo_cd->set_priority( exporting iv_priority = iv_documentprops-priority ).
     endif.
-
-    lo_cd->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
 
     "set soldoc data
     if iv_documentprops-occ_ids is not initial.
@@ -301,9 +300,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       raising error_no_target_ttype.
     endif.
 
-    "get Description, Doc. Number, Priority, Status
+    "get Header data
     lt_doc_properties-description = ls_orderadm_h-description.
-    lt_doc_properties-object_id = ls_orderadm_h-object_id.
+    lt_doc_properties-object_id = ls_orderadm_h-object_id. "to be removed (moved to get WebUI fields)
+    lt_doc_properties-created_at = ls_orderadm_h-created_at.
     lo_api_object->get_priority( importing ev_priority = lt_doc_properties-priority ).
     lo_api_object->get_status( importing ev_user_status = lt_doc_properties-status ). "user status
 
@@ -383,23 +383,49 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
   method get_webui_fields.
 
-    data: ls_customer_h type crmt_customer_h_wrk.
+    data: ls_customer_h  type crmt_customer_h_wrk.
+    data: ls_orderadm_h  type crmt_orderadm_h_wrk.
+    data: ls_custom_line type zcustom_fields.
+    data: lv_sorce       type zsolmove_sorce.
+    data: lv_sub_type    type zsolmove_param.
+    data: fldname        type fieldname.
 
-    iv_1o_api->get_customer_h( importing
-        es_customer_h        = ls_customer_h
-*       et_customer_h        =
-*      exceptions
-*        document_not_found   = 1
-*        error_occurred       = 2
-*        document_locked      = 3
-*        no_change_authority  = 4
-*        no_display_authority = 5
-*        no_change_allowed    = 6
-*        others               = 7
-    ).
-    if sy-subrc <> 0.
-*     Implement suitable error handling here
-    endif.
+    field-symbols: <fld> type any.
+
+    "get header data
+    iv_1o_api->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
+
+    " get customer header
+    iv_1o_api->get_customer_h( importing es_customer_h = ls_customer_h ).
+
+    "save customer_h fields that was mapped
+    select sorce, target from zsolmove_mapping where type = 'FILD' and sub_type = 'CUSTOMER_H'
+      into (@lv_sorce, @ls_custom_line-target_field).
+      ls_custom_line-target_table = 'CUSTOMER_H'.
+      concatenate 'ls_customer_h-' lv_sorce into fldname.
+      assign (fldname) to <fld>.
+      ls_custom_line-value = <fld>.
+      if ls_custom_line-value is not initial.
+        append ls_custom_line to ev_custom_fields.
+      endif.
+    endselect.
+    "add other custom tables if requiered....
+
+    "get additional data (old document id) to custom fields in target system
+    select sub_type, target from zsolmove_mapping where type = 'ID'
+      into (@lv_sub_type, @ls_custom_line-target_field).
+
+      if lv_sub_type = 'CUSTOMER_H'.
+        ls_custom_line-target_table = 'CUSTOMER_H'.
+        ls_custom_line-value = ls_orderadm_h-object_id.
+        "add other custom tables if requiered....
+      endif.
+
+      if ls_custom_line-value is not initial.
+        append ls_custom_line to ev_custom_fields.
+      endif.
+
+    endselect.
 
 
   endmethod.
@@ -696,32 +722,29 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   method set_webui_fields.
+
     "Record Customer_h fields
     data: ls_customer_h type crmt_customer_h_com.
     data: ls_customer_h_old type crmt_customer_h_wrk.
+    data: ls_fields type zcustom_fields.
+    data: fldname type fieldname.
 
-    iv_1o_api->get_customer_h( importing
-        es_customer_h        = ls_customer_h_old
-*       et_customer_h        =
-*      exceptions
-*        document_not_found   = 1
-*        error_occurred       = 2
-*        document_locked      = 3
-*        no_change_authority  = 4
-*        no_display_authority = 5
-*        no_change_allowed    = 6
-*        others               = 7
-    ).
-    if sy-subrc <> 0.
-*     Implement suitable error handling here
-    endif.
+    field-symbols:
+    <fld> type any.
+
+    iv_1o_api->get_customer_h( importing es_customer_h = ls_customer_h_old ).
 
     ls_customer_h-ref_guid = ls_customer_h_old-guid.
-*    ls_customer_h-zzsnownumber = cs_cd-snownumber.
-*    ls_customer_h-zzsnowsysid = cs_cd-snowsysid.
-*    ls_customer_h-zzsnowrecnumber = cs_cd-snowrecordnumber.
-*    ls_customer_h-zzsnowgroup = cs_cd-snowgroup.
-*    ls_customer_h-zzsnowassigngrp = cs_cd-snowassignmentgroup.
+
+    loop at ev_custom_fields into ls_fields.
+      if ls_fields-target_table = 'CUSTOMER_H'.
+        concatenate 'ls_customer_h-' ls_fields-target_field into fldname.
+
+        assign (fldname) to <fld>.
+        <fld> = ls_fields-value.
+        "ls_customer_h-ls_fields-target_field = ls_fields-value.
+      endif.
+    endloop.
 
     iv_1o_api->set_customer_h( exporting is_customer_h = ls_customer_h ).
 
