@@ -19,14 +19,23 @@ public section.
       !IV_DOCUMENTPROPS type ZDOC_PROPS_STRUCT
     exporting
       !EV_MESSAGE type ZPROCESS_LOG_TT .
-protected section.
-private section.
-
   class-methods GET_STATUS
     importing
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
       !EV_STATUS type ZSTATUS_TT .
+  class-methods GET_TR
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+    exporting
+      !EV_TRANSPORTS type AIC_S_CM_TRANSPORT_REQ_T .
+  class-methods SET_TR
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+      !EV_TRANSPORTS type AIC_S_CM_TRANSPORT_REQ_T
+    exceptions
+      ERROR_TR_ALREADY_REGISTERED
+      ERROR_TR_NOT_ADDED .
   class-methods GET_WEBUI_FIELDS
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
@@ -87,6 +96,8 @@ private section.
       !IV_ATTACHMENT_LIST type AGS_T_CRM_ATTACHMENT
     exporting
       !EV_ATTACHMENTS type ZATTACHMENT_TT .
+protected section.
+private section.
 ENDCLASS.
 
 
@@ -186,17 +197,29 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       endif.
     endif.
 
+    "set partners
+    if iv_documentprops-partners is not initial.
+      "Evgeny please do a bp mapping on a sorce system side.
+      "Please do get and set in a seporate metods of a class.
+      "lo_cd->set_partners( exporting it_partner = iv_documentprops-partners ).
+    endif.
+
+    "set transports
+    if iv_documentprops-transports is not initial.
+
+    endif.
 
     "set status
     " !status set should be the last action to allow other changes for closed document!
     if iv_documentprops-status is not initial.
       call method zcl_solmove_helper=>set_status
         exporting
-          iv_status      = iv_documentprops-status
+          iv_status = iv_documentprops-status
         changing
-          iv_1o_api      = lo_cd.
+          iv_1o_api = lo_cd.
     endif.
     " !status set should be the last action to allow other changes for closed document!
+
 
 *    record document and return solution manager id and solution manager guid
     lo_cd->save( changing cv_log_handle = lv_log_handle ).
@@ -281,7 +304,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lt_occ_ids          type smud_t_guid22,
           ls_status           type crmt_status_wrkt,
           lt_smud_occurrences type cl_ags_crm_1o_api=>tt_smud_occurrence,
-          lt_attachment_list  type ags_t_crm_attachment.
+          lt_attachment_list  type ags_t_crm_attachment,
+          lt_partner          type crmt_partner_external_wrkt.
 
     "Get document instance
     call method cl_ags_crm_1o_api=>get_instance
@@ -327,11 +351,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     "get all statuses of the document
     call method zcl_solmove_helper=>get_status
       exporting
-        iv_guid = iv_guid
+        iv_guid   = iv_guid
       importing
-       ev_status = lt_doc_properties-status.
-      .
-
+        ev_status = lt_doc_properties-status.
 
     "get occ_ids
     lo_api_object->get_smud_occurrences(
@@ -373,6 +395,15 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       importing
         ev_cycle = lt_doc_properties-cycle.
 
+    "get transports
+    if lt_doc_properties-cycle is not initial.
+      call method zcl_solmove_helper=>get_tr
+        exporting
+          iv_guid       = iv_guid
+        importing
+          ev_transports = lt_doc_properties-transports.
+    endif.
+
     " get custom fields for WEB UI
     call method zcl_solmove_helper=>get_webui_fields
       exporting
@@ -380,6 +411,22 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       importing
         ev_custom_fields = lt_doc_properties-custom_fields.
 
+    "get partners
+    call method lo_api_object->get_partners
+      importing
+        et_partner           = lt_partner
+      exceptions
+        document_not_found   = 1
+        error_occurred       = 2
+        document_locked      = 3
+        no_change_authority  = 4
+        no_display_authority = 5
+        no_change_allowed    = 6
+        others               = 7.
+
+    if lt_partner is not initial.
+      lt_doc_properties-partners = lt_partner.
+    endif.
 
   endmethod.
 
@@ -402,6 +449,18 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       append lv_stat to ev_status.
     endselect.
 
+  endmethod.
+
+
+  method get_tr.
+    call method cl_aic_cm_trans_backend_api=>read
+      exporting
+        iv_header_guid = iv_guid
+      importing
+        et_attr        = EV_TRANSPORTS
+      receiving
+        rv_success     = data(lv_flag)
+        .
   endmethod.
 
 
@@ -760,6 +819,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       endif.
     endif.
 
+  endmethod.
+
+
+  method SET_TR.
   endmethod.
 
 
