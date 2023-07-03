@@ -31,7 +31,8 @@ data:
 select-options p_obj_id for lt_obj_id-obj_id no intervals default 8000000060.
 parameters p_rfc    type rfcdwf default 'NONE'.
 parameters p_ttype  type crmt_process_type_db default 'S1MJ'.
-parameters p_test as checkbox default 'X'.
+parameters p_update as checkbox default ''.
+parameters p_test   as checkbox default 'X'.
 
 start-of-selection.
 

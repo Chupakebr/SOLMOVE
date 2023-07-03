@@ -39,6 +39,12 @@
      <ENTRY>Document Type</ENTRY>
      <LENGTH>21</LENGTH>
     </item>
+    <item>
+     <ID>S</ID>
+     <KEY>P_UPDATE</KEY>
+     <ENTRY>Update existing document?</ENTRY>
+     <LENGTH>33</LENGTH>
+    </item>
    </TPOOL>
   </asx:values>
  </asx:abap>

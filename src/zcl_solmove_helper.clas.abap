@@ -181,6 +181,30 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           iv_cycle = iv_documentprops-cycle.
     endif.
 
+    "set transports
+    if iv_documentprops-transports is not initial.
+      call method zcl_solmove_helper=>set_tr
+        exporting
+          iv_guid                     = ls_orderadm_h-guid
+          ev_transports               = iv_documentprops-transports
+        exceptions
+          error_tr_already_registered = 1
+          error_tr_not_added          = 2
+          others                      = 3.
+      if sy-subrc <> 0.
+        case sy-subrc.
+          when 1.
+            lv_message = 'Error: Transports already mapped in target system'.
+            append lv_message to ev_message.
+          when others.
+            lv_message = 'Error: could not add transports to the created doc'.
+            append lv_message to ev_message.
+        endcase.
+      endif.
+
+
+    endif.
+
     "add webui fields
     if iv_documentprops-custom_fields is not initial.
       call method zcl_solmove_helper=>set_webui_fields
@@ -202,11 +226,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       "Evgeny please do a bp mapping on a sorce system side.
       "Please do get and set in a seporate metods of a class.
       "lo_cd->set_partners( exporting it_partner = iv_documentprops-partners ).
-    endif.
-
-    "set transports
-    if iv_documentprops-transports is not initial.
-
     endif.
 
     "set status
@@ -279,16 +298,17 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   method get_cycle.
-    data lv_sorce type zsolmove_sorce.
+    data lv_source type zsolmove_source.
 
     select single release_crm_id into @ev_cycle
       from tsocm_cr_context as cont
       left join aic_release_cycl as cycl on cont~project_id = cycl~smi_project
     where created_guid = @iv_guid and release_crm_id is not null.
 
-    lv_sorce = ev_cycle.
+    lv_source = ev_cycle.
 
-    select single target into @data(lv_target) from zsolmove_mapping where sorce = @lv_sorce and type = 'CYCLE'.
+    select single target into @data(lv_target) from zsolmove_mapping
+      where source = @lv_source and type = 'CYCLE'.
 
     ev_cycle = lv_target.
 
@@ -432,10 +452,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   method get_ibase.
-    data lv_sorce_ibase type zsolmove_sorce.
-    lv_sorce_ibase = iv_ibase.
+    data lv_source_ibase type zsolmove_source.
+    lv_source_ibase = iv_ibase.
     select single target into @data(lv_ibase) from zsolmove_mapping
-      where sorce = @lv_sorce_ibase
+      where source = @lv_source_ibase
       and type = 'IBASE'.
     ev_ibase = lv_ibase.
   endmethod.
@@ -465,10 +485,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   method get_type.
-    data lv_sorce_type type zsolmove_sorce.
-    lv_sorce_type = iv_type.
+    data lv_source_type type zsolmove_source.
+    lv_source_type = iv_type.
     select single target into @data(lv_type) from zsolmove_mapping
-      where sorce = @lv_sorce_type
+      where source = @lv_source_type
       and TYPE = 'TYPE'.
     ev_type = lv_type.
   endmethod.
@@ -479,7 +499,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     data: ls_customer_h  type crmt_customer_h_wrk.
     data: ls_orderadm_h  type crmt_orderadm_h_wrk.
     data: ls_custom_line type zcustom_fields.
-    data: lv_sorce       type zsolmove_sorce.
+    data: lv_source       type zsolmove_source.
     data: lv_sub_type    type zsolmove_param.
     data: fldname        type fieldname.
 
@@ -492,10 +512,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     iv_1o_api->get_customer_h( importing es_customer_h = ls_customer_h ).
 
     "save customer_h fields that was mapped
-    select sorce, target from zsolmove_mapping where type = 'FILD' and sub_type = 'CUSTOMER_H'
-      into (@lv_sorce, @ls_custom_line-target_field).
+    select source, target from zsolmove_mapping where type = 'FILD' and sub_type = 'CUSTOMER_H'
+      into (@lv_source, @ls_custom_line-target_field).
       ls_custom_line-target_table = 'CUSTOMER_H'.
-      concatenate 'ls_customer_h-' lv_sorce into fldname.
+      concatenate 'ls_customer_h-' lv_source into fldname.
       assign (fldname) to <fld>.
       ls_custom_line-value = <fld>.
       if ls_custom_line-value is not initial.
