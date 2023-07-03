@@ -26,7 +26,8 @@ data:
   lv_total_lines    type i,
   ls_doc_properties type zdoc_props_struct,
   lt_messages       type zprocess_log_tt,
-  ls_message        type tdline.
+  ls_message        type tdline,
+  oref              type ref to cx_root.
 
 select-options p_obj_id for lt_obj_id-obj_id no intervals default 8000000060.
 parameters p_rfc    type rfcdwf default 'NONE'.
@@ -71,20 +72,31 @@ start-of-selection.
         write: sy-subrc.
       else.
 
+        if p_update is not initial.
+          ls_doc_properties-update = 'X'.
+        endif.
+
         if p_test is initial.
 
-          "call RFC to create documnet in target system
-          call function 'Z_CREATE_DOC'
-            destination p_rfc
-            exporting
-              is_documentprops = ls_doc_properties
-            importing
-              et_messages      = lt_messages.
+          try.
 
-          loop at lt_messages into ls_message.
-            "processing results:
-            write: / ls_message. "Processed Message
-          endloop.
+              "call RFC to create documnet in target system
+              call function 'Z_CREATE_DOC'
+                destination p_rfc
+                exporting
+                  is_documentprops = ls_doc_properties
+                importing
+                  et_messages      = lt_messages.
+
+
+              loop at lt_messages into ls_message.
+                "processing results:
+                write: / ls_message. "Processed Message
+              endloop.
+
+            catch cx_root into oref.
+              write: 'Unhandled Error while creating document'.
+          endtry.
 
         else.
           write: / 'Test read for document: '.

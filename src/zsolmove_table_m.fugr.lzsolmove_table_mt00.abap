@@ -1,6 +1,6 @@
 *---------------------------------------------------------------------*
 *    view related data declarations
-*   generation date: 02.06.2023 at 14:35:21
+*   generation date: 03.07.2023 at 14:30:58
 *   view maintenance generator version: #001407#
 *---------------------------------------------------------------------*
 *...processing: ZSOLMOVE_MAPPING................................*

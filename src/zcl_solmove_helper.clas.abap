@@ -5,6 +5,12 @@ class ZCL_SOLMOVE_HELPER definition
 
 public section.
 
+  class-methods FIND_DOC
+    importing
+      !IV_DOC_ID type ZCUSTOM_FIELDS
+      !IV_TYPE type CRMT_PROCESS_TYPE
+    exporting
+      !EV_GUID type CRMT_OBJECT_GUID .
   class-methods GET_DOC_DATA
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -116,17 +122,49 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lt_status_com type crmt_status_comt,
           lv_message    type tdline.
 
+    if iv_documentprops-update is not initial.
+      "check if document already created?
+      call method zcl_solmove_helper=>find_doc
+        exporting
+          iv_doc_id = iv_documentprops-object_id
+          iv_type   = iv_documentprops-type
+        importing
+          ev_guid   = data(lv_guig).
+
+      if lv_guig is not initial.
+        "document found, update it.
+        cl_ags_crm_1o_api=>get_instance(
+       	 exporting
+          iv_header_guid                = lv_guig
+          iv_process_mode               = cl_ags_crm_1o_api=>ac_mode-change  " Processing Mode of Transaction
+        importing
+          eo_instance                   = lo_cd
+        exceptions
+          invalid_parameter_combination = 1
+          error_occurred                = 2
+          others                        = 3 ).
+        if sy-subrc <> 0.
+          lv_message = 'Error: Could not read created Document.'.
+        endif.
+      endif.
+    endif.
+
     "Create document
-    cl_ags_crm_1o_api=>get_instance(
-    exporting
-      iv_process_mode = gc_mode-create
-      iv_process_type = iv_documentprops-type
-    importing
-      eo_instance = lo_cd
-      ).
+    if lo_cd is not bound.
+      cl_ags_crm_1o_api=>get_instance(
+      exporting
+        iv_process_mode = gc_mode-create " Processing Mode of Transaction
+        iv_process_type = iv_documentprops-type
+      importing
+        eo_instance = lo_cd
+        ).
+      if sy-subrc <> 0.
+        lv_message = 'Error: Could not ceate new doc.'.
+      endif.
+    endif.
 
     if lo_cd is not bound.
-      lv_message = 'Error: Could not initialize cl_ags_crm_1o_api for creation'.
+      lv_message = 'Error: Could not initialize document. Process stoped.'.
       append lv_message to ev_message.
       exit.
     endif.
@@ -251,6 +289,22 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
+  method find_doc.
+    data: cond_syntax type string.
+    data: fldname type fieldname.
+
+    fldname = iv_doc_id-target_field.
+    concatenate fldname '=' iv_doc_id-value into cond_syntax separated by space.
+
+    if iv_doc_id-target_table = 'CUSTOMER_H'.
+      select single O~guid from crmd_customer_h as c
+        left join crmd_orderadm_h as o on c~guid = o~guid and o~process_type = @iv_type
+        where (cond_syntax) into @ev_guid.
+    endif.
+
+  endmethod.
+
+
   method get_attachments.
 
     data: ls_phio                type skwf_io,
@@ -364,9 +418,13 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     "get Header data
     lt_doc_properties-description = ls_orderadm_h-description.
-    lt_doc_properties-object_id = ls_orderadm_h-object_id. "to be removed (moved to get WebUI fields)
     lt_doc_properties-created_at = ls_orderadm_h-created_at.
     lo_api_object->get_priority( importing ev_priority = lt_doc_properties-priority ).
+
+    "save document id, will be only used for updating priviesly created doc
+    lt_doc_properties-object_id-value = ls_orderadm_h-object_id.
+    select single sub_type, target from zsolmove_mapping where type = 'ID'
+      into (@lt_doc_properties-object_id-target_table, @lt_doc_properties-object_id-target_field).
 
     "get all statuses of the document
     call method zcl_solmove_helper=>get_status
