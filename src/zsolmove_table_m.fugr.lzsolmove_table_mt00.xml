@@ -4,14 +4,8 @@
   <asx:values>
    <PROGDIR>
     <NAME>LZSOLMOVE_TABLE_MT00</NAME>
-    <DBAPL>S</DBAPL>
-    <DBNA>D$</DBNA>
     <SUBC>I</SUBC>
-    <APPL>S</APPL>
     <RLOAD>E</RLOAD>
-    <FIXPT>X</FIXPT>
-    <LDBNAME>D$S</LDBNAME>
-    <UCCHECK>X</UCCHECK>
    </PROGDIR>
   </asx:values>
  </asx:abap>

@@ -42,7 +42,7 @@
     <item>
      <ID>S</ID>
      <KEY>P_UPDATE</KEY>
-     <ENTRY>Update existing document?</ENTRY>
+     <ENTRY>Update created document?</ENTRY>
      <LENGTH>33</LENGTH>
     </item>
    </TPOOL>
