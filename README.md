@@ -24,7 +24,7 @@ The following content will be moved:
 - Multi-level category (requires mapping)
 - Reach Texts
 - Dates
-- Business Partners (requires mapping)
+! Business Partners (requires mapping)
 ```
 
 # Instalation
