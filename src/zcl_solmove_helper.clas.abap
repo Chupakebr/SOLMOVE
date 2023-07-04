@@ -34,14 +34,19 @@ public section.
     importing
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
-      !EV_TRANSPORTS type AIC_S_CM_TRANSPORT_REQ_T .
+      !EV_TRANSPORTS type /TMWFLOW/TRORDHC_T .
   class-methods SET_TR
     importing
       !IV_GUID type CRMT_OBJECT_GUID
-      !EV_TRANSPORTS type AIC_S_CM_TRANSPORT_REQ_T
+      !EV_TRANSPORTS type /TMWFLOW/TRORDHC_T
     exceptions
       ERROR_TR_ALREADY_REGISTERED
       ERROR_TR_NOT_ADDED .
+  class-methods GET_PARTNERS
+    importing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
+    exporting
+      !LT_PARTNER type COMT_PARTNER_COMT .
   class-methods GET_WEBUI_FIELDS
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
@@ -263,11 +268,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    "set partners
+    "set partners. This call is enough. Additional fields will be picked inside method set_partners
     IF iv_documentprops-partners IS NOT INITIAL.
-      "Evgeny please do a bp mapping on a sorce system side.
-      "Please do get and set in a seporate metods of a class.
-      "lo_cd->set_partners( exporting it_partner = iv_documentprops-partners ).
+      lo_cd->set_partners( exporting it_partner = iv_documentprops-partners ).
     ENDIF.
 
     "set status
@@ -383,7 +386,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           ls_status           type crmt_status_wrkt,
           lt_smud_occurrences type cl_ags_crm_1o_api=>tt_smud_occurrence,
           lt_attachment_list  type ags_t_crm_attachment,
-          lt_partner          type crmt_partner_external_wrkt.
+          lt_partner_wrkt     type crmt_partner_external_wrkt,
+          lt_partner          type comt_partner_comt.
 
     "Get document instance
     call method cl_ags_crm_1o_api=>get_instance
@@ -494,21 +498,11 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         ev_custom_fields = lt_doc_properties-custom_fields.
 
     "get partners
-    call method lo_api_object->get_partners
+    call method zcl_solmove_helper=>get_partners
+      exporting
+        iv_1o_api        = lo_api_object
       importing
-        et_partner           = lt_partner
-      exceptions
-        document_not_found   = 1
-        error_occurred       = 2
-        document_locked      = 3
-        no_change_authority  = 4
-        no_display_authority = 5
-        no_change_allowed    = 6
-        others               = 7.
-
-    if lt_partner is not initial.
-      lt_doc_properties-partners = lt_partner.
-    endif.
+        lt_partner      = lt_doc_properties-partners.
 
   endmethod.
 
@@ -520,6 +514,41 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       where source = @lv_source_ibase
       and type = 'IBASE'.
     ev_ibase = lv_ibase.
+  endmethod.
+
+
+  method GET_PARTNERS.
+
+    data: lt_partner_wrkt     type crmt_partner_external_wrkt,
+          ls_partner          type comt_partner_com.
+
+    call method iv_1o_api->get_partners
+      importing
+        et_partner           = lt_partner_wrkt
+      exceptions
+        document_not_found   = 1
+        error_occurred       = 2
+        document_locked      = 3
+        no_change_authority  = 4
+        no_display_authority = 5
+        no_change_allowed    = 6
+        others               = 7.
+
+    if lt_partner_wrkt is not initial.
+      loop at lt_partner_wrkt into data(ls_partner_wrk).
+        select single target from zsolmove_mapping where source eq @ls_partner_wrk-ref_partner_no into @data(target_partner_no).
+        if sy-subrc = 0.
+          ls_partner-partner_fct    = ls_partner_wrk-ref_partner_fct.
+          ls_partner-no_type        = ls_partner_wrk-ref_no_type.
+          ls_partner-partner_no     = target_partner_no.
+          ls_partner-display_type   = ls_partner_wrk-ref_display_type.
+        endif.
+        insert ls_partner into table lt_partner.
+        clear ls_partner.
+      endloop.
+    endif.
+
+
   endmethod.
 
 
@@ -535,14 +564,18 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   method get_tr.
-    call method cl_aic_cm_trans_backend_api=>read
-      exporting
-        iv_header_guid = iv_guid
-      importing
-        et_attr        = EV_TRANSPORTS
-      receiving
-        rv_success     = data(lv_flag)
-        .
+* Read transport requests
+
+    /tmwflow/cl_transport_util=>get_chng_doc_transp_req(
+        exporting
+          iv_header_guid = iv_guid
+        importing
+          et_transp_req_new  = ev_transports  ).
+
+    if  ev_transports is initial.
+      return.
+    endif.
+
   endmethod.
 
 
@@ -904,7 +937,67 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
-  method SET_TR.
+  method set_tr.
+    data: ls_transport      type aic_s_cm_transport_req,
+          lo_transp_utility type ref to cl_ai_crm_action_utility,
+          lv_app_status	    type /tmwflow/smstatus,
+          lt_app_message    type balmi_t,
+          lt_err_message    type balmi_t.
+
+    loop at ev_transports into ls_transport.
+      select count(*) into @data(lv_tr) from /tmwflow/trord_n where trorder_number = @ls_transport-trorder_number.
+      if lv_tr > 0.
+        message id sy-msgid type sy-msgty number sy-msgno
+        with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+        raising error_tr_already_registered.
+        exit.
+      endif.
+    endloop.
+    "Assigne tr (without checks)
+    "how to do in a correct way see i.e.
+    "in /SALM/CL_CRMUI5_SERVICE_DATA->DO_ASSIGN_TRANSPORT_REQS
+
+    create object lo_transp_utility
+      exporting
+        iv_crm_doc_id     = iv_guid
+      exceptions
+        err_with_document = 1.
+
+    if sy-subrc <> 0.
+      message id sy-msgid type sy-msgty number sy-msgno
+      with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+      raising error_tr_not_added.
+      exit.
+    else.
+      lo_transp_utility->assign_transp_request(
+        exporting
+          it_transp_req      = ev_transports
+        importing
+          ev_app_status      = lv_app_status
+          et_app_message     = lt_app_message
+          et_err_message     = lt_err_message
+        exceptions
+          action_not_allowed = 1
+          others             = 2 ).
+
+      if sy-subrc <> 0.
+        message id sy-msgid type sy-msgty number sy-msgno
+        with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+        raising error_tr_not_added.
+        exit.
+*            et_msg = lt_err_message.
+*        LOOP AT lt_err_message ASSIGNING <fs_message>.
+*          lo_msg_service->add_message(
+*            iv_msg_id      = <fs_message>-msgid
+*            iv_msg_type    = <fs_message>-msgty
+*            iv_msg_number  = <fs_message>-msgno
+*            iv_msg_v1      = <fs_message>-msgv1
+*            iv_msg_v2      = <fs_message>-msgv2
+*            iv_msg_v3      = <fs_message>-msgv3
+*            iv_msg_v4      = <fs_message>-msgv4 ).
+*        ENDLOOP.
+      endif.
+    endif.
   endmethod.
 
 

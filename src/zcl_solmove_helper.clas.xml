@@ -51,6 +51,11 @@
      <DESCRIPT>Get configuration item</DESCRIPT>
     </SEOCOMPOTX>
     <SEOCOMPOTX>
+     <CMPNAME>GET_PARTNERS</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Get custom WEBUI fields created with AET</DESCRIPT>
+    </SEOCOMPOTX>
+    <SEOCOMPOTX>
      <CMPNAME>GET_STATUS</CMPNAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Get Document status</DESCRIPT>
@@ -106,6 +111,26 @@
      <DESCRIPT>Set custom fields created with AET in WEB UI</DESCRIPT>
     </SEOCOMPOTX>
    </DESCRIPTIONS>
+   <DESCRIPTIONS_SUB>
+    <SEOSUBCOTX>
+     <CMPNAME>GET_PARTNERS</CMPNAME>
+     <SCONAME>LT_PARTNER</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Transfer Table for Partners to Partner Processing</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>GET_TR</CMPNAME>
+     <SCONAME>EV_TRANSPORTS</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>replacement of /tmwflow/trordhc_type</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>SET_TR</CMPNAME>
+     <SCONAME>EV_TRANSPORTS</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>replacement of /tmwflow/trordhc_type</DESCRIPT>
+    </SEOSUBCOTX>
+   </DESCRIPTIONS_SUB>
   </asx:values>
  </asx:abap>
 </abapGit>
