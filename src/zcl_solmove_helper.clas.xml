@@ -81,6 +81,11 @@
      <DESCRIPT>Add attachmnets to the document</DESCRIPT>
     </SEOCOMPOTX>
     <SEOCOMPOTX>
+     <CMPNAME>SET_CREATION_INFO</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Set Creation Info (Dates and User)</DESCRIPT>
+    </SEOCOMPOTX>
+    <SEOCOMPOTX>
      <CMPNAME>SET_CYCLE</CMPNAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Set Change managment Cycle</DESCRIPT>
@@ -123,6 +128,18 @@
      <SCONAME>EV_TRANSPORTS</SCONAME>
      <LANGU>E</LANGU>
      <DESCRIPT>replacement of /tmwflow/trordhc_type</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>SET_CREATION_INFO</CMPNAME>
+     <SCONAME>IV_DOC_PROPERTIES</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>CRM Document transfere structure</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>SET_CREATION_INFO</CMPNAME>
+     <SCONAME>IV_GUID</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>GUID of a CRM Order Object</DESCRIPT>
     </SEOSUBCOTX>
     <SEOSUBCOTX>
      <CMPNAME>SET_TR</CMPNAME>

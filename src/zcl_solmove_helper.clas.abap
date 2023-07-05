@@ -107,6 +107,10 @@ public section.
       !IV_ATTACHMENT_LIST type AGS_T_CRM_ATTACHMENT
     exporting
       !EV_ATTACHMENTS type ZATTACHMENT_TT .
+  class-methods SET_CREATION_INFO
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+      !IV_DOC_PROPERTIES type ZDOC_PROPS_STRUCT .
 protected section.
 private section.
 ENDCLASS.
@@ -123,6 +127,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     DATA: lo_cd         TYPE REF TO cl_ags_crm_1o_api, "CRM Document object instance to create and maintain CRM Document through standard API
           lv_log_handle TYPE balloghndl,
           ls_orderadm_h TYPE crmt_orderadm_h_wrk,
+          lt_orderadm_h TYPE crmt_orderadm_h_wrkt,
           ls_customer_h TYPE crmt_customer_h_com,
           lt_status_com TYPE crmt_status_comt,
           lv_message    TYPE tdline.
@@ -139,7 +144,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       IF lv_guig IS NOT INITIAL.
         "document found, update it.
         cl_ags_crm_1o_api=>get_instance(
-       	 EXPORTING
+          EXPORTING
           iv_header_guid                = lv_guig
           iv_process_mode               = cl_ags_crm_1o_api=>ac_mode-change  " Processing Mode of Transaction
         IMPORTING
@@ -284,12 +289,18 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     ENDIF.
     " !status set should be the last action to allow other changes for closed document!
 
-
 *    record document and return solution manager id and solution manager guid
     lo_cd->save( CHANGING cv_log_handle = lv_log_handle ).
 
-*    Check if document was ctreated?
+*   update creation information
+    CALL METHOD zcl_solmove_helper=>set_creation_info
+      EXPORTING
+        iv_guid           = lo_cd->get_guid( )
+        iv_doc_properties = iv_documentprops.
+
+*    Check if document was created?
     lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
+
     CONCATENATE 'Document:' ls_orderadm_h-object_id 'processed in target.' INTO lv_message SEPARATED BY space.
     APPEND lv_message TO ev_message.
 
@@ -426,7 +437,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     "get Header data
     lt_doc_properties-description = ls_orderadm_h-description.
+    lt_doc_properties-posting_date = ls_orderadm_h-posting_date.
     lt_doc_properties-created_at = ls_orderadm_h-created_at.
+    lt_doc_properties-created_by = ls_orderadm_h-created_by.
     lo_api_object->get_priority( importing ev_priority = lt_doc_properties-priority ).
 
     "save document id, will be only used for updating priviesly created doc
@@ -697,6 +710,22 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     endloop.
 
   endmethod.
+
+
+  METHOD set_creation_info.
+
+*   update creating information
+    DATA(lv_posting_date) = iv_doc_properties-posting_date.
+    DATA(lv_created_at) = iv_doc_properties-created_at.
+    DATA(lv_created_by) = iv_doc_properties-created_by.
+
+    UPDATE crmd_orderadm_h
+        SET posting_date = @lv_posting_date,
+        created_at = @lv_created_at,
+        created_by = @lv_created_by
+      WHERE guid EQ @iv_guid.
+
+  ENDMETHOD.
 
 
   method set_cycle.
