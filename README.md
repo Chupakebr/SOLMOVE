@@ -13,6 +13,7 @@ The following content will be moved:
 + Cycles (requieres mapping)
 + Ibase component (requieres mapping)
 + Custom fields from CUSTOMER_H (requires mapping)
++ Creation Information (Posting & Created Dates - Created by User)
 
 - SLA
 - Approval procedure
