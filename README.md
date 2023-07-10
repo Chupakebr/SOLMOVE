@@ -24,7 +24,6 @@ The following content will be moved:
 - Status change history (CRM_JCDS)
 - Multi-level category (requires mapping)
 - Reach Texts
-! Dates
 ! Business Partners (requires mapping)
 ```
 
