@@ -21,7 +21,7 @@ The following content will be moved:
 - Scope
 ! Transport
 
-
+- Status change history (CRM_JCDS)
 - Multi-level category (requires mapping)
 - Reach Texts
 ! Dates
