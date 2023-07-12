@@ -111,6 +111,12 @@ public section.
     importing
       !IV_GUID type CRMT_OBJECT_GUID
       !IV_DOC_PROPERTIES type ZDOC_PROPS_STRUCT .
+  class-methods GET_CATEGORIES
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+      !IV_CATALOG_TYPE type CRMT_CATALOGTYPE optional
+    exporting
+      !RT_RESULT type CRMT_ERMS_CAT_CA_LANG_TAB .
 protected section.
 private section.
 ENDCLASS.
@@ -191,6 +197,11 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     "set priority
     IF iv_documentprops-priority IS NOT INITIAL.
       lo_cd->set_priority( EXPORTING iv_priority = iv_documentprops-priority ).
+    ENDIF.
+
+     "set category
+    IF iv_documentprops-category IS NOT INITIAL.
+      lo_cd->set_category( EXPORTING iv_category = iv_documentprops-category ).
     ENDIF.
 
     "set soldoc data
@@ -369,6 +380,78 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
+  METHOD get_categories.
+* low level function for debugging: crm_erms_cat_ca_read + crm_erms_cat_as_read.
+
+    TYPES :
+      tt_category TYPE  TABLE  OF  REF  TO if_crm_erms_catego_category.
+
+    DATA :
+      li_aspect     TYPE  REF  TO if_crm_erms_catego_aspect,
+      li_category   TYPE  REF  TO if_crm_erms_catego_category,
+      lr_categories TYPE  REF  TO data,
+      ls_cat_lang   TYPE crmt_erms_cat_ca_lang.
+
+    FIELD-SYMBOLS:
+      <ft_category> TYPE tt_category,
+      <fi_category> LIKE li_category.
+
+* Ensure valid result.
+    REFRESH rt_result[].
+
+* Get Assigned Category.
+    CALL METHOD cl_crm_ml_category_util=>get_categoryfirst
+      EXPORTING
+        iv_ref_guid     = iv_guid
+        iv_ref_kind     = 'A'
+        iv_catalog_type = iv_catalog_type
+      IMPORTING
+        er_aspect       = li_aspect
+        er_category     = li_category.
+
+    CHECK li_aspect IS  BOUND  AND li_category IS  BOUND .
+
+* Get All Parent Nodes.
+    CALL METHOD cl_crm_ml_category_util=>get_cat_pars_all
+      EXPORTING
+        ir_aspect     = li_aspect
+        ir_category   = li_category
+      IMPORTING
+        er_categories = lr_categories.
+
+    CHECK lr_categories IS  BOUND .
+
+    ASSIGN lr_categories->* TO <ft_category>.
+
+* Don't forget our assigned category.
+    INSERT li_category INTO <ft_category> INDEX 1.
+
+    LOOP  AT <ft_category> ASSIGNING <fi_category>.
+
+* Get Category Details.
+      CALL METHOD <fi_category>->get_details
+* EXPORTING
+* iv_auth_check = ''
+        IMPORTING
+*         ev_cat      = ls_cat
+          ev_cat_lang = ls_cat_lang.
+
+* Ensure that description is filled.
+      IF ls_cat_lang-cat_desc IS  INITIAL .
+        ls_cat_lang-cat_desc = ls_cat_lang-cat_labl.
+      ENDIF .
+
+      IF ls_cat_lang-cat_desc IS  INITIAL .
+        ls_cat_lang-cat_desc = ls_cat_lang-cat-cat_id.
+      ENDIF .
+
+* Transfer Result
+      INSERT ls_cat_lang INTO rt_result[] INDEX 1.
+
+    ENDLOOP .
+  ENDMETHOD.
+
+
   method get_cycle.
     data lv_source type zsolmove_source.
 
@@ -387,137 +470,145 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
-  method get_doc_data.
+  METHOD get_doc_data.
 
-    data: lo_api_object       type ref to cl_ags_crm_1o_api,
-          ls_orderadm_h       type crmt_orderadm_h_wrk,
-          lv_type             type crmt_process_type,
-          ls_occ_ids          type line of smud_t_guid22,
-          lt_occ_ids          type smud_t_guid22,
-          ls_status           type crmt_status_wrkt,
-          lt_smud_occurrences type cl_ags_crm_1o_api=>tt_smud_occurrence,
-          lt_attachment_list  type ags_t_crm_attachment,
-          lt_partner_wrkt     type crmt_partner_external_wrkt,
-          lt_partner          type comt_partner_comt.
+    DATA: lo_api_object       TYPE REF TO cl_ags_crm_1o_api,
+          ls_orderadm_h       TYPE crmt_orderadm_h_wrk,
+          lv_type             TYPE crmt_process_type,
+          ls_occ_ids          TYPE LINE OF smud_t_guid22,
+          lt_occ_ids          TYPE smud_t_guid22,
+          ls_status           TYPE crmt_status_wrkt,
+          lt_smud_occurrences TYPE cl_ags_crm_1o_api=>tt_smud_occurrence,
+          lt_attachment_list  TYPE ags_t_crm_attachment,
+          lt_partner_wrkt     TYPE crmt_partner_external_wrkt,
+          lt_partner          TYPE comt_partner_comt.
 
     "Get document instance
-    call method cl_ags_crm_1o_api=>get_instance
-      exporting
+    CALL METHOD cl_ags_crm_1o_api=>get_instance
+      EXPORTING
         iv_language                   = sy-langu
         iv_header_guid                = iv_guid
         iv_process_mode               = cl_ags_crm_1o_api=>ac_mode-display
-      importing
+      IMPORTING
         eo_instance                   = lo_api_object
-      exceptions
+      EXCEPTIONS
         invalid_parameter_combination = 1
         error_occurred                = 2
-        others                        = 3.
-    if sy-subrc <> 0.
-      message id sy-msgid type sy-msgty number sy-msgno
-        with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
-        raising error_read_doc.
-    endif.
+        OTHERS                        = 3.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+        RAISING error_read_doc.
+    ENDIF.
 
     "get header data
-    lo_api_object->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
+    lo_api_object->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
 
     "mapping to the target t-type
-    call method zcl_solmove_helper=>get_type
-      exporting
+    CALL METHOD zcl_solmove_helper=>get_type
+      EXPORTING
         iv_type = ls_orderadm_h-process_type
-      importing
+      IMPORTING
         ev_type = lt_doc_properties-type.
 
     lv_type = ls_orderadm_h-process_type.
 
-    if lt_doc_properties-type is initial.
-      message text-001 type 'E'
-      raising error_no_target_ttype.
-    endif.
+    IF lt_doc_properties-type IS INITIAL.
+      MESSAGE text-001 TYPE 'E'
+      RAISING error_no_target_ttype.
+    ENDIF.
 
     "get Header data
     lt_doc_properties-description = ls_orderadm_h-description.
     lt_doc_properties-posting_date = ls_orderadm_h-posting_date.
     lt_doc_properties-created_at = ls_orderadm_h-created_at.
     lt_doc_properties-created_by = ls_orderadm_h-created_by.
-    lo_api_object->get_priority( importing ev_priority = lt_doc_properties-priority ).
+    lo_api_object->get_priority( IMPORTING ev_priority = lt_doc_properties-priority ).
+    lo_api_object->get_category( IMPORTING ev_category = lt_doc_properties-category ).
 
     "save document id, will be only used for updating priviesly created doc
     lt_doc_properties-object_id-value = ls_orderadm_h-object_id.
-    select single sub_type, target from zsolmove_mapping where type = 'ID'
-      into (@lt_doc_properties-object_id-target_table, @lt_doc_properties-object_id-target_field).
+    SELECT SINGLE sub_type, target FROM zsolmove_mapping WHERE type = 'ID'
+      INTO (@lt_doc_properties-object_id-target_table, @lt_doc_properties-object_id-target_field).
 
     "get all statuses of the document
-    call method zcl_solmove_helper=>get_status
-      exporting
+    CALL METHOD zcl_solmove_helper=>get_status
+      EXPORTING
         iv_guid   = iv_guid
-      importing
+      IMPORTING
         ev_status = lt_doc_properties-status.
 
     "get occ_ids
     lo_api_object->get_smud_occurrences(
-      importing
+      IMPORTING
         et_smud_occurrences = lt_smud_occurrences ).
 
-    if lt_smud_occurrences is not initial.
-      loop at lt_smud_occurrences into data(ls_smud_ids).
+    IF lt_smud_occurrences IS NOT INITIAL.
+      LOOP AT lt_smud_occurrences INTO DATA(ls_smud_ids).
         ls_occ_ids = ls_smud_ids-occ_id.
-        append ls_occ_ids to lt_occ_ids.
-      endloop.
-    endif.
+        APPEND ls_occ_ids TO lt_occ_ids.
+      ENDLOOP.
+    ENDIF.
     lt_doc_properties-occ_ids = lt_occ_ids.
 
     " get attachments
-    lo_api_object->get_attachment_list( importing et_attach_list = lt_attachment_list ).
-    if lt_attachment_list is not initial.
-      call method zcl_solmove_helper=>get_attachments
-        exporting
+    lo_api_object->get_attachment_list( IMPORTING et_attach_list = lt_attachment_list ).
+    IF lt_attachment_list IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>get_attachments
+        EXPORTING
           iv_attachment_list = lt_attachment_list
-        importing
+        IMPORTING
           ev_attachments     = lt_doc_properties-attach_list.
-    endif.
+    ENDIF.
 
     "get i-base
-    lo_api_object->get_ibase( importing es_refobj = data(lv_refobj) ) .
-    if lv_refobj is not initial.
-      call method zcl_solmove_helper=>get_ibase
-        exporting
+    lo_api_object->get_ibase( IMPORTING es_refobj = DATA(lv_refobj) ) .
+    IF lv_refobj IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>get_ibase
+        EXPORTING
           iv_ibase = lv_refobj-product_id
-        importing
+        IMPORTING
           ev_ibase = lt_doc_properties-ibase.
-    endif.
+    ENDIF.
 
     " get change cycle
-    call method zcl_solmove_helper=>get_cycle
-      exporting
+    CALL METHOD zcl_solmove_helper=>get_cycle
+      EXPORTING
         iv_guid  = iv_guid
-      importing
+      IMPORTING
         ev_cycle = lt_doc_properties-cycle.
 
     "get transports
-    if lt_doc_properties-cycle is not initial.
-      call method zcl_solmove_helper=>get_tr
-        exporting
+    IF lt_doc_properties-cycle IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>get_tr
+        EXPORTING
           iv_guid       = iv_guid
-        importing
+        IMPORTING
           ev_transports = lt_doc_properties-transports.
-    endif.
+    ENDIF.
 
     " get custom fields for WEB UI
-    call method zcl_solmove_helper=>get_webui_fields
-      exporting
+    CALL METHOD zcl_solmove_helper=>get_webui_fields
+      EXPORTING
         iv_1o_api        = lo_api_object
-      importing
+      IMPORTING
         ev_custom_fields = lt_doc_properties-custom_fields.
 
     "get partners
-    call method zcl_solmove_helper=>get_partners
-      exporting
-        iv_1o_api        = lo_api_object
-      importing
-        lt_partner      = lt_doc_properties-partners.
+    CALL METHOD zcl_solmove_helper=>get_partners
+      EXPORTING
+        iv_1o_api  = lo_api_object
+      IMPORTING
+        lt_partner = lt_doc_properties-partners.
 
-  endmethod.
+    "get multi level categories
+    CALL METHOD zcl_solmove_helper=>get_categories
+      EXPORTING
+        iv_guid   = iv_guid
+      IMPORTING
+        rt_result = lt_doc_properties-categories.
+
+  ENDMETHOD.
 
 
   method get_ibase.
