@@ -4,8 +4,6 @@
   <asx:values>
    <DEVC>
     <CTEXT>Move solman content</CTEXT>
-    <COMP_POSID>SV-SMG</COMP_POSID>
-    <COMPONENT>B200001518</COMPONENT>
    </DEVC>
   </asx:values>
  </asx:abap>
