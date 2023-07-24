@@ -114,7 +114,7 @@ public section.
   class-methods GET_CATEGORIES
     importing
       !IV_GUID type CRMT_OBJECT_GUID
-      !IV_CATALOG_TYPE type CRMT_CATALOGTYPE
+      !IV_CATALOG_TYPE type CRMT_CATALOGTYPE optional
     exporting
       !RT_RESULT type CRMT_ERMS_CAT_CA_LANG_TAB .
 protected section.
@@ -126,217 +126,196 @@ ENDCLASS.
 CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
-  method create_doc.
+  METHOD create_doc.
 
-    include: crm_mode_con. "Include with standard CRM constants
+    INCLUDE: crm_mode_con. "Include with standard CRM constants
 
-    data: lo_cd         type ref to cl_ags_crm_1o_api, "CRM Document object instance to create and maintain CRM Document through standard API
-          lv_log_handle type balloghndl,
-          ls_orderadm_h type crmt_orderadm_h_wrk,
-          lt_orderadm_h type crmt_orderadm_h_wrkt,
-          ls_customer_h type crmt_customer_h_com,
-          lt_status_com type crmt_status_comt,
-          lv_message    type tdline.
+    DATA: lo_cd         TYPE REF TO cl_ags_crm_1o_api, "CRM Document object instance to create and maintain CRM Document through standard API
+          lv_log_handle TYPE balloghndl,
+          ls_orderadm_h TYPE crmt_orderadm_h_wrk,
+          lt_orderadm_h TYPE crmt_orderadm_h_wrkt,
+          ls_customer_h TYPE crmt_customer_h_com,
+          lt_status_com TYPE crmt_status_comt,
+          lv_message    TYPE tdline.
 
-    if iv_documentprops-update is not initial.
+    IF iv_documentprops-update IS NOT INITIAL.
       "check if document already created?
-      call method zcl_solmove_helper=>find_doc
-        exporting
+      CALL METHOD zcl_solmove_helper=>find_doc
+        EXPORTING
           iv_doc_id = iv_documentprops-object_id
           iv_type   = iv_documentprops-type
-        importing
-          ev_guid   = data(lv_guig).
+        IMPORTING
+          ev_guid   = DATA(lv_guig).
 
-      if lv_guig is not initial.
+      IF lv_guig IS NOT INITIAL.
         "document found, update it.
         cl_ags_crm_1o_api=>get_instance(
-          exporting
+          EXPORTING
           iv_header_guid                = lv_guig
           iv_process_mode               = cl_ags_crm_1o_api=>ac_mode-change  " Processing Mode of Transaction
-        importing
+        IMPORTING
           eo_instance                   = lo_cd
-        exceptions
+        EXCEPTIONS
           invalid_parameter_combination = 1
           error_occurred                = 2
-          others                        = 3 ).
-        if sy-subrc <> 0.
+          OTHERS                        = 3 ).
+        IF sy-subrc <> 0.
           lv_message = 'Error: Could not read created Document.'.
-        else.
+        ELSE.
           lv_message = 'Document found, updating.'.
-        endif.
-        append lv_message to ev_message.
-      endif.
-    endif.
+        ENDIF.
+        APPEND lv_message TO ev_message.
+      ENDIF.
+    ENDIF.
 
     "Create document
-    if lo_cd is not bound.
+    IF lo_cd IS NOT BOUND.
       cl_ags_crm_1o_api=>get_instance(
-      exporting
+      EXPORTING
         iv_process_mode = gc_mode-create " Processing Mode of Transaction
         iv_process_type = iv_documentprops-type
-      importing
+      IMPORTING
         eo_instance = lo_cd
         ).
-      if sy-subrc <> 0.
+      IF sy-subrc <> 0.
         lv_message = 'Error: Could not ceate new doc.'.
-        append lv_message to ev_message.
-      endif.
-    endif.
+        APPEND lv_message TO ev_message.
+      ENDIF.
+    ENDIF.
 
-    if lo_cd is not bound.
+    IF lo_cd IS NOT BOUND.
       lv_message = 'Error: Could not initialize document. Process stoped.'.
-      append lv_message to ev_message.
-      exit.
-    endif.
+      APPEND lv_message TO ev_message.
+      EXIT.
+    ENDIF.
     "get guid of the created document
-    lo_cd->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h
-              exceptions
-                 document_not_found   = 1
-                 error_occurred       = 2
-                 document_locked      = 3
-                 no_change_authority  = 4
-                 no_display_authority = 5
-                 no_change_allowed    = 6
-                 others               = 7 ).
-    if sy-subrc <> 0.
-      case sy-subrc.
-        when 1.
-          lv_message = 'Error: document not found.'.
-        when 3.
-          lv_message = 'Error: document locked.'.
-        when 4.
-          lv_message = 'Error: no change authority.'.
-        when 5.
-          lv_message = 'Error: no display authority.'.
-        when 6.
-          lv_message = 'Error: no change allowed.'.
-        when others.
-          lv_message = 'Error: Could not change document.'.
-      endcase.
-      append lv_message to ev_message.
-      exit.
-    endif.
+    lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
 
     "set description
-    lo_cd->set_short_text( exporting iv_short_text = iv_documentprops-description ).
+    lo_cd->set_short_text( EXPORTING iv_short_text = iv_documentprops-description ).
 
     "set priority
-    if iv_documentprops-priority is not initial.
-      lo_cd->set_priority( exporting iv_priority = iv_documentprops-priority ).
-    endif.
+    IF iv_documentprops-priority IS NOT INITIAL.
+      lo_cd->set_priority( EXPORTING iv_priority = iv_documentprops-priority ).
+    ENDIF.
+
+     "set category
+    IF iv_documentprops-category IS NOT INITIAL.
+      lo_cd->set_category( EXPORTING iv_category = iv_documentprops-category ).
+    ENDIF.
 
     "set soldoc data
-    if iv_documentprops-occ_ids is not initial.
-      call method zcl_solmove_helper=>set_soldoc
-        exporting
+    IF iv_documentprops-occ_ids IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_soldoc
+        EXPORTING
           iv_1o_api = lo_cd
           iv_smud_t = iv_documentprops-occ_ids.
-    endif.
+    ENDIF.
 
     " add attachments
-    if iv_documentprops-attach_list is not initial.
-      data: lt_object_type type sibftypeid.
+    IF iv_documentprops-attach_list IS NOT INITIAL.
+      DATA: lt_object_type TYPE sibftypeid.
       lt_object_type = ls_orderadm_h-object_type.
 
-      call method zcl_solmove_helper=>set_attachments
-        exporting
+      CALL METHOD zcl_solmove_helper=>set_attachments
+        EXPORTING
           iv_guid        = ls_orderadm_h-guid
           iv_object_type = lt_object_type
           iv_attach_list = iv_documentprops-attach_list.
-    endif.
+    ENDIF.
 
     "add ibase
-    if iv_documentprops-ibase is not initial.
-      call method zcl_solmove_helper=>set_ibase
-        exporting
+    IF iv_documentprops-ibase IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_ibase
+        EXPORTING
           iv_guid   = ls_orderadm_h-guid
           iv_ibase  = iv_documentprops-ibase
-        changing
+        CHANGING
           iv_1o_api = lo_cd.
-    endif.
+    ENDIF.
 
     "add cycle
-    if iv_documentprops-cycle is not initial.
-      call method zcl_solmove_helper=>set_cycle
-        exporting
+    IF iv_documentprops-cycle IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_cycle
+        EXPORTING
           iv_guid  = ls_orderadm_h-guid
           iv_type  = ls_orderadm_h-process_type
           iv_ibase = iv_documentprops-ibase
           iv_cycle = iv_documentprops-cycle.
-    endif.
+    ENDIF.
 
     "set transports
-    if iv_documentprops-transports is not initial.
-      call method zcl_solmove_helper=>set_tr
-        exporting
+    IF iv_documentprops-transports IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_tr
+        EXPORTING
           iv_guid                     = ls_orderadm_h-guid
           ev_transports               = iv_documentprops-transports
-        exceptions
+        EXCEPTIONS
           error_tr_already_registered = 1
           error_tr_not_added          = 2
-          others                      = 3.
-      if sy-subrc <> 0.
-        case sy-subrc.
-          when 1.
+          OTHERS                      = 3.
+      IF sy-subrc <> 0.
+        CASE sy-subrc.
+          WHEN 1.
             lv_message = 'Error: Transports already mapped in target system'.
-            append lv_message to ev_message.
-          when others.
+            APPEND lv_message TO ev_message.
+          WHEN OTHERS.
             lv_message = 'Error: could not add transports to the created doc'.
-            append lv_message to ev_message.
-        endcase.
-      endif.
+            APPEND lv_message TO ev_message.
+        ENDCASE.
+      ENDIF.
 
 
-    endif.
+    ENDIF.
 
     "add webui fields
-    if iv_documentprops-custom_fields is not initial.
-      call method zcl_solmove_helper=>set_webui_fields
-        exporting
+    IF iv_documentprops-custom_fields IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_webui_fields
+        EXPORTING
           ev_custom_fields      = iv_documentprops-custom_fields
-        changing
+        CHANGING
           iv_1o_api             = lo_cd
-        exceptions
+        EXCEPTIONS
           error_customer_header = 1
-          others                = 2.
-      if sy-subrc <> 0.
+          OTHERS                = 2.
+      IF sy-subrc <> 0.
         lv_message = 'Error: Could not set document webui fields'.
-        append lv_message to ev_message.
-      endif.
-    endif.
+        APPEND lv_message TO ev_message.
+      ENDIF.
+    ENDIF.
 
     "set partners. This call is enough. Additional fields will be picked inside method set_partners
-    if iv_documentprops-partners is not initial.
+    IF iv_documentprops-partners IS NOT INITIAL.
       lo_cd->set_partners( exporting it_partner = iv_documentprops-partners ).
-    endif.
+    ENDIF.
 
     "set status
     " !status set should be the last action to allow other changes for closed document!
-    if iv_documentprops-status is not initial.
-      call method zcl_solmove_helper=>set_status
-        exporting
+    IF iv_documentprops-status IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_status
+        EXPORTING
           iv_status = iv_documentprops-status
-        changing
+        CHANGING
           iv_1o_api = lo_cd.
-    endif.
+    ENDIF.
     " !status set should be the last action to allow other changes for closed document!
 
 *    record document and return solution manager id and solution manager guid
-    lo_cd->save( changing cv_log_handle = lv_log_handle ).
+    lo_cd->save( CHANGING cv_log_handle = lv_log_handle ).
 
 *   update creation information
-    call method zcl_solmove_helper=>set_creation_info
-      exporting
+    CALL METHOD zcl_solmove_helper=>set_creation_info
+      EXPORTING
         iv_guid           = lo_cd->get_guid( )
         iv_doc_properties = iv_documentprops.
 
 *    Check if document was created?
-    lo_cd->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
+    lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
 
-    concatenate 'Document:' ls_orderadm_h-object_id 'processed in target.' into lv_message separated by space.
-    append lv_message to ev_message.
+    CONCATENATE 'Document:' ls_orderadm_h-object_id 'processed in target.' INTO lv_message SEPARATED BY space.
+    APPEND lv_message TO ev_message.
 
-  endmethod.
+  ENDMETHOD.
 
 
   method find_doc.
@@ -491,137 +470,145 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
-  method get_doc_data.
+  METHOD get_doc_data.
 
-    data: lo_api_object       type ref to cl_ags_crm_1o_api,
-          ls_orderadm_h       type crmt_orderadm_h_wrk,
-          lv_type             type crmt_process_type,
-          ls_occ_ids          type line of smud_t_guid22,
-          lt_occ_ids          type smud_t_guid22,
-          ls_status           type crmt_status_wrkt,
-          lt_smud_occurrences type cl_ags_crm_1o_api=>tt_smud_occurrence,
-          lt_attachment_list  type ags_t_crm_attachment,
-          lt_partner_wrkt     type crmt_partner_external_wrkt,
-          lt_partner          type comt_partner_comt.
+    DATA: lo_api_object       TYPE REF TO cl_ags_crm_1o_api,
+          ls_orderadm_h       TYPE crmt_orderadm_h_wrk,
+          lv_type             TYPE crmt_process_type,
+          ls_occ_ids          TYPE LINE OF smud_t_guid22,
+          lt_occ_ids          TYPE smud_t_guid22,
+          ls_status           TYPE crmt_status_wrkt,
+          lt_smud_occurrences TYPE cl_ags_crm_1o_api=>tt_smud_occurrence,
+          lt_attachment_list  TYPE ags_t_crm_attachment,
+          lt_partner_wrkt     TYPE crmt_partner_external_wrkt,
+          lt_partner          TYPE comt_partner_comt.
 
     "Get document instance
-    call method cl_ags_crm_1o_api=>get_instance
-      exporting
+    CALL METHOD cl_ags_crm_1o_api=>get_instance
+      EXPORTING
         iv_language                   = sy-langu
         iv_header_guid                = iv_guid
         iv_process_mode               = cl_ags_crm_1o_api=>ac_mode-display
-      importing
+      IMPORTING
         eo_instance                   = lo_api_object
-      exceptions
+      EXCEPTIONS
         invalid_parameter_combination = 1
         error_occurred                = 2
-        others                        = 3.
-    if sy-subrc <> 0.
-      message id sy-msgid type sy-msgty number sy-msgno
-        with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
-        raising error_read_doc.
-    endif.
+        OTHERS                        = 3.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+        RAISING error_read_doc.
+    ENDIF.
 
     "get header data
-    lo_api_object->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
+    lo_api_object->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
 
     "mapping to the target t-type
-    call method zcl_solmove_helper=>get_type
-      exporting
+    CALL METHOD zcl_solmove_helper=>get_type
+      EXPORTING
         iv_type = ls_orderadm_h-process_type
-      importing
+      IMPORTING
         ev_type = lt_doc_properties-type.
 
     lv_type = ls_orderadm_h-process_type.
 
-    if lt_doc_properties-type is initial.
-      message text-001 type 'E'
-      raising error_no_target_ttype.
-    endif.
+    IF lt_doc_properties-type IS INITIAL.
+      MESSAGE text-001 TYPE 'E'
+      RAISING error_no_target_ttype.
+    ENDIF.
 
     "get Header data
     lt_doc_properties-description = ls_orderadm_h-description.
     lt_doc_properties-posting_date = ls_orderadm_h-posting_date.
     lt_doc_properties-created_at = ls_orderadm_h-created_at.
     lt_doc_properties-created_by = ls_orderadm_h-created_by.
-    lo_api_object->get_priority( importing ev_priority = lt_doc_properties-priority ).
+    lo_api_object->get_priority( IMPORTING ev_priority = lt_doc_properties-priority ).
+    lo_api_object->get_category( IMPORTING ev_category = lt_doc_properties-category ).
 
     "save document id, will be only used for updating priviesly created doc
     lt_doc_properties-object_id-value = ls_orderadm_h-object_id.
-    select single sub_type, target from zsolmove_mapping where type = 'ID'
-      into (@lt_doc_properties-object_id-target_table, @lt_doc_properties-object_id-target_field).
+    SELECT SINGLE sub_type, target FROM zsolmove_mapping WHERE type = 'ID'
+      INTO (@lt_doc_properties-object_id-target_table, @lt_doc_properties-object_id-target_field).
 
     "get all statuses of the document
-    call method zcl_solmove_helper=>get_status
-      exporting
+    CALL METHOD zcl_solmove_helper=>get_status
+      EXPORTING
         iv_guid   = iv_guid
-      importing
+      IMPORTING
         ev_status = lt_doc_properties-status.
 
     "get occ_ids
     lo_api_object->get_smud_occurrences(
-      importing
+      IMPORTING
         et_smud_occurrences = lt_smud_occurrences ).
 
-    if lt_smud_occurrences is not initial.
-      loop at lt_smud_occurrences into data(ls_smud_ids).
+    IF lt_smud_occurrences IS NOT INITIAL.
+      LOOP AT lt_smud_occurrences INTO DATA(ls_smud_ids).
         ls_occ_ids = ls_smud_ids-occ_id.
-        append ls_occ_ids to lt_occ_ids.
-      endloop.
-    endif.
+        APPEND ls_occ_ids TO lt_occ_ids.
+      ENDLOOP.
+    ENDIF.
     lt_doc_properties-occ_ids = lt_occ_ids.
 
     " get attachments
-    lo_api_object->get_attachment_list( importing et_attach_list = lt_attachment_list ).
-    if lt_attachment_list is not initial.
-      call method zcl_solmove_helper=>get_attachments
-        exporting
+    lo_api_object->get_attachment_list( IMPORTING et_attach_list = lt_attachment_list ).
+    IF lt_attachment_list IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>get_attachments
+        EXPORTING
           iv_attachment_list = lt_attachment_list
-        importing
+        IMPORTING
           ev_attachments     = lt_doc_properties-attach_list.
-    endif.
+    ENDIF.
 
     "get i-base
-    lo_api_object->get_ibase( importing es_refobj = data(lv_refobj) ) .
-    if lv_refobj is not initial.
-      call method zcl_solmove_helper=>get_ibase
-        exporting
+    lo_api_object->get_ibase( IMPORTING es_refobj = DATA(lv_refobj) ) .
+    IF lv_refobj IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>get_ibase
+        EXPORTING
           iv_ibase = lv_refobj-product_id
-        importing
+        IMPORTING
           ev_ibase = lt_doc_properties-ibase.
-    endif.
+    ENDIF.
 
     " get change cycle
-    call method zcl_solmove_helper=>get_cycle
-      exporting
+    CALL METHOD zcl_solmove_helper=>get_cycle
+      EXPORTING
         iv_guid  = iv_guid
-      importing
+      IMPORTING
         ev_cycle = lt_doc_properties-cycle.
 
     "get transports
-    if lt_doc_properties-cycle is not initial.
-      call method zcl_solmove_helper=>get_tr
-        exporting
+    IF lt_doc_properties-cycle IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>get_tr
+        EXPORTING
           iv_guid       = iv_guid
-        importing
+        IMPORTING
           ev_transports = lt_doc_properties-transports.
-    endif.
+    ENDIF.
 
     " get custom fields for WEB UI
-    call method zcl_solmove_helper=>get_webui_fields
-      exporting
+    CALL METHOD zcl_solmove_helper=>get_webui_fields
+      EXPORTING
         iv_1o_api        = lo_api_object
-      importing
+      IMPORTING
         ev_custom_fields = lt_doc_properties-custom_fields.
 
     "get partners
-    call method zcl_solmove_helper=>get_partners
-      exporting
-        iv_1o_api        = lo_api_object
-      importing
-        lt_partner      = lt_doc_properties-partners.
+    CALL METHOD zcl_solmove_helper=>get_partners
+      EXPORTING
+        iv_1o_api  = lo_api_object
+      IMPORTING
+        lt_partner = lt_doc_properties-partners.
 
-  endmethod.
+    "get multi level categories
+    CALL METHOD zcl_solmove_helper=>get_categories
+      EXPORTING
+        iv_guid   = iv_guid
+      IMPORTING
+        rt_result = lt_doc_properties-categories.
+
+  ENDMETHOD.
 
 
   method get_ibase.
