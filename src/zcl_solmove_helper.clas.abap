@@ -399,7 +399,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 * Ensure valid result.
     REFRESH rt_result[].
 
-* Get Assigned Category.
+* Get Assigned Categorys.
     CALL METHOD cl_crm_ml_category_util=>get_categoryfirst
       EXPORTING
         iv_ref_guid     = iv_guid
