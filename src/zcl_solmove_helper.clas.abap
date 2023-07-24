@@ -395,6 +395,78 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
+  METHOD get_categories.
+* low level function for debugging: crm_erms_cat_ca_read + crm_erms_cat_as_read.
+
+    TYPES :
+      tt_category TYPE  TABLE  OF  REF  TO if_crm_erms_catego_category.
+
+    DATA :
+      li_aspect     TYPE  REF  TO if_crm_erms_catego_aspect,
+      li_category   TYPE  REF  TO if_crm_erms_catego_category,
+      lr_categories TYPE  REF  TO data,
+      ls_cat_lang   TYPE crmt_erms_cat_ca_lang.
+
+    FIELD-SYMBOLS:
+      <ft_category> TYPE tt_category,
+      <fi_category> LIKE li_category.
+
+* Ensure valid result.
+    REFRESH rt_result[].
+
+* Get Assigned Categorys.
+    CALL METHOD cl_crm_ml_category_util=>get_categoryfirst
+      EXPORTING
+        iv_ref_guid     = iv_guid
+        iv_ref_kind     = 'A'
+        iv_catalog_type = iv_catalog_type
+      IMPORTING
+        er_aspect       = li_aspect
+        er_category     = li_category.
+
+    CHECK li_aspect IS  BOUND  AND li_category IS  BOUND .
+
+* Get All Parent Nodes.
+    CALL METHOD cl_crm_ml_category_util=>get_cat_pars_all
+      EXPORTING
+        ir_aspect     = li_aspect
+        ir_category   = li_category
+      IMPORTING
+        er_categories = lr_categories.
+
+    CHECK lr_categories IS  BOUND .
+
+    ASSIGN lr_categories->* TO <ft_category>.
+
+* Don't forget our assigned category.
+    INSERT li_category INTO <ft_category> INDEX 1.
+
+    LOOP  AT <ft_category> ASSIGNING <fi_category>.
+
+* Get Category Details.
+      CALL METHOD <fi_category>->get_details
+* EXPORTING
+* iv_auth_check = ''
+        IMPORTING
+*         ev_cat      = ls_cat
+          ev_cat_lang = ls_cat_lang.
+
+* Ensure that description is filled.
+      IF ls_cat_lang-cat_desc IS  INITIAL .
+        ls_cat_lang-cat_desc = ls_cat_lang-cat_labl.
+      ENDIF .
+
+      IF ls_cat_lang-cat_desc IS  INITIAL .
+        ls_cat_lang-cat_desc = ls_cat_lang-cat-cat_id.
+      ENDIF .
+
+* Transfer Result
+      INSERT ls_cat_lang INTO rt_result[] INDEX 1.
+
+    ENDLOOP .
+  ENDMETHOD.
+
+
   method get_cycle.
     data lv_source type zsolmove_source.
 
