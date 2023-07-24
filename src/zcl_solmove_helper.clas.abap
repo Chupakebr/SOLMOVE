@@ -111,6 +111,12 @@ public section.
     importing
       !IV_GUID type CRMT_OBJECT_GUID
       !IV_DOC_PROPERTIES type ZDOC_PROPS_STRUCT .
+  class-methods GET_CATEGORIES
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+      !IV_CATALOG_TYPE type CRMT_CATALOGTYPE
+    exporting
+      !RT_RESULT type CRMT_ERMS_CAT_CA_LANG_TAB .
 protected section.
 private section.
 ENDCLASS.
