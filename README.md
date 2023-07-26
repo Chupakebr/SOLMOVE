@@ -7,7 +7,7 @@ The following content will be moved:
 + Transaction types (requires mapping)
 + Description
 + Priority
-! Status (include inactive)
++ Status
 + Attachments
 + Soldoc content
 + Cycles (requieres mapping)
