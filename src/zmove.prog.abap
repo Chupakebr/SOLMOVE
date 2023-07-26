@@ -5,105 +5,111 @@
 *& Main report for moving document data from one solman to another
 *&
 *&---------------------------------------------------------------------*
-report zmove.
+REPORT zmove.
 
-types:
-  begin of ts_obj_id_struct,
-    obj_id type crmt_object_id_db,
-  end of ts_obj_id_struct.
+TYPES:
+  BEGIN OF ts_obj_id_struct,
+    obj_id TYPE crmt_object_id_db,
+  END OF ts_obj_id_struct.
 
-types:
-  begin of ts_order_data,
-    object_id	type crmt_object_id_db,
-    guid      type crmt_object_guid,
-  end of ts_order_data.
+TYPES:
+  BEGIN OF ts_order_data,
+    object_id	TYPE crmt_object_id_db,
+    guid      TYPE crmt_object_guid,
+  END OF ts_order_data.
 
-data:
-  lt_obj_id         type table of ts_obj_id_struct with header line,
-  lr_obj_id         type range of crmt_object_id_db,
-  lt_orders_data    type table of ts_order_data,
-  ls_order_data     type ts_order_data,
-  lv_total_lines    type i,
-  ls_doc_properties type zdoc_props_struct,
-  lt_messages       type zprocess_log_tt,
-  ls_message        type tdline,
-  oref              type ref to cx_root.
+DATA:
+  lt_obj_id         TYPE TABLE OF ts_obj_id_struct WITH HEADER LINE,
+  lr_obj_id         TYPE RANGE OF crmt_object_id_db,
+  lt_orders_data    TYPE TABLE OF ts_order_data,
+  ls_order_data     TYPE ts_order_data,
+  lv_total_lines    TYPE i,
+  ls_doc_properties TYPE zdoc_props_struct,
+  lt_messages       TYPE zprocess_log_tt,
+  ls_message        TYPE tdline,
+  oref              TYPE REF TO cx_root.
 
-select-options p_obj_id for lt_obj_id-obj_id no intervals default 8000000060.
-parameters p_rfc    type rfcdwf default 'NONE'.
-parameters p_ttype  type crmt_process_type_db default 'S1MJ'.
-parameters p_update as checkbox default 'X'.
-parameters p_test   as checkbox default 'X'.
+SELECT-OPTIONS p_obj_id FOR lt_obj_id-obj_id NO INTERVALS DEFAULT 8000000060.
+PARAMETERS p_rfc    TYPE rfcdwf DEFAULT 'NONE'.
+PARAMETERS p_ttype  TYPE crmt_process_type_db DEFAULT 'S1MJ'.
+PARAMETERS p_update AS CHECKBOX DEFAULT 'X'.
+PARAMETERS p_status AS CHECKBOX DEFAULT ''. "! if document in closed status no updates are posible.
+PARAMETERS p_test   AS CHECKBOX DEFAULT 'X'.
 
-start-of-selection.
+START-OF-SELECTION.
 
   "Select documents to be transfered
-  select business_transaction~object_id,
+  SELECT business_transaction~object_id,
     business_transaction~guid
-    from crmd_orderadm_h as business_transaction
-    where business_transaction~object_id in @p_obj_id
-    and  business_transaction~process_type = @p_ttype
-    into table @lt_orders_data.
+    FROM crmd_orderadm_h AS business_transaction
+    WHERE business_transaction~object_id IN @p_obj_id
+    AND  business_transaction~process_type = @p_ttype
+    INTO TABLE @lt_orders_data.
 
   lv_total_lines = lines( lt_orders_data ).
 
-  if sy-subrc eq 0.
+  IF sy-subrc EQ 0.
 
-    loop at lt_orders_data into ls_order_data.
-      clear: lt_messages.
-      clear: ls_doc_properties.
+    LOOP AT lt_orders_data INTO ls_order_data.
+      CLEAR: lt_messages.
+      CLEAR: ls_doc_properties.
 
       "get data to transfer
 
-      call method zcl_solmove_helper=>get_doc_data
-        exporting
+      CALL METHOD zcl_solmove_helper=>get_doc_data
+        EXPORTING
           iv_guid               = ls_order_data-guid
-        importing
+        IMPORTING
           lt_doc_properties     = ls_doc_properties
-        exceptions
+        EXCEPTIONS
           error_read_doc        = 1
           error_get_attachments = 2
           error_no_target_ttype = 3
-          others                = 4.
-      if sy-subrc <> 0.
-        write: / 'Error reading document: '.
-        write: ls_order_data-object_id.
-        write: / 'Error id:'.
-        write: sy-subrc.
-      else.
+          OTHERS                = 4.
+      IF sy-subrc <> 0.
+        WRITE: / 'Error reading document: '.
+        WRITE: ls_order_data-object_id.
+        WRITE: / 'Error id:'.
+        WRITE: sy-subrc.
+      ELSE.
 
-        if p_update is not initial.
+        IF p_update IS NOT INITIAL.
           ls_doc_properties-update = 'X'.
-        endif.
+        ENDIF.
 
-        if p_test is initial.
+        IF p_status IS INITIAL.
+          CLEAR ls_doc_properties-status.
+          CLEAR ls_doc_properties-stat_hist.
+        ENDIF.
 
-          try.
+        IF p_test IS INITIAL.
+
+          TRY.
 
               "call RFC to create documnet in target system
-              call function 'Z_CREATE_DOC'
-                destination p_rfc
-                exporting
+              CALL FUNCTION 'Z_CREATE_DOC'
+                DESTINATION p_rfc
+                EXPORTING
                   is_documentprops = ls_doc_properties
-                importing
+                IMPORTING
                   et_messages      = lt_messages.
 
 
-              loop at lt_messages into ls_message.
+              LOOP AT lt_messages INTO ls_message.
                 "processing results:
-                write: / ls_message. "Processed Message
-              endloop.
+                WRITE: / ls_message. "Processed Message
+              ENDLOOP.
 
-            catch cx_root into oref.
-              write: 'Unhandled Error while creating document'.
-          endtry.
+            CATCH cx_root INTO oref.
+              WRITE: 'Unhandled Error while creating document'.
+          ENDTRY.
 
-        else.
-          write: / 'Test read for document: '.
-          write: ls_order_data-object_id.
-          write: 'successful'.
-        endif.
-      endif.
+        ELSE.
+          WRITE: / 'Test read for document: '.
+          WRITE: ls_order_data-object_id.
+          WRITE: 'successful'.
+        ENDIF.
+      ENDIF.
 
       "indicate process status
       cl_progress_indicator=>progress_indicate(
@@ -112,10 +118,10 @@ start-of-selection.
           i_total              = lv_total_lines
           i_output_immediately = abap_false ).
 
-    endloop.
+    ENDLOOP.
 
-    write: / 'Total: '.
-    write: lv_total_lines.
-    write: ' documents was processed'.
+    WRITE: / 'Total: '.
+    WRITE: lv_total_lines.
+    WRITE: ' documents was processed'.
 
-  endif.
+  ENDIF.

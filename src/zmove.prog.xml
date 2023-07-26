@@ -29,6 +29,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_STATUS</KEY>
+     <ENTRY>Status change</ENTRY>
+     <LENGTH>21</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_TEST</KEY>
      <ENTRY>Test (no RFC call to Target)</ENTRY>
      <LENGTH>36</LENGTH>

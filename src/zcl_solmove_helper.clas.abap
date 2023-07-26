@@ -10,7 +10,9 @@ public section.
       !IV_DOC_ID type ZCUSTOM_FIELDS
       !IV_TYPE type CRMT_PROCESS_TYPE
     exporting
-      !EV_GUID type CRMT_OBJECT_GUID .
+      !EV_GUID type CRMT_OBJECT_GUID
+    exceptions
+      ERROR_MAPPING .
   class-methods GET_DOC_DATA
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -142,10 +144,18 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       "check if document already created?
       CALL METHOD zcl_solmove_helper=>find_doc
         EXPORTING
-          iv_doc_id = iv_documentprops-object_id
-          iv_type   = iv_documentprops-type
+          iv_doc_id     = iv_documentprops-object_id
+          iv_type       = iv_documentprops-type
         IMPORTING
-          ev_guid   = DATA(lv_guig).
+          ev_guid       = DATA(lv_guig)
+        EXCEPTIONS
+          error_mapping = 1
+          OTHERS        = 2.
+      IF sy-subrc <> 0.
+        lv_message = 'Error: Could not find created doc (check mapping).'.
+        APPEND lv_message TO ev_message.
+      ENDIF.
+
 
       IF lv_guig IS NOT INITIAL.
         "document found, update it.
@@ -199,7 +209,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lo_cd->set_priority( EXPORTING iv_priority = iv_documentprops-priority ).
     ENDIF.
 
-     "set category
+    "set category
     IF iv_documentprops-category IS NOT INITIAL.
       lo_cd->set_category( EXPORTING iv_category = iv_documentprops-category ).
     ENDIF.
@@ -286,7 +296,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     "set partners. This call is enough. Additional fields will be picked inside method set_partners
     IF iv_documentprops-partners IS NOT INITIAL.
-      lo_cd->set_partners( exporting it_partner = iv_documentprops-partners ).
+      lo_cd->set_partners( EXPORTING it_partner = iv_documentprops-partners ).
     ENDIF.
 
     "set status
@@ -318,20 +328,29 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
-  method find_doc.
-    data: cond_syntax type string.
-    data: fldname type fieldname.
+  METHOD find_doc.
+    DATA: cond_syntax TYPE string,
+          fldname     TYPE fieldname,
+          oref        TYPE REF TO cx_root,
+          text        TYPE string.
 
     fldname = iv_doc_id-target_field.
-    concatenate fldname '=' iv_doc_id-value into cond_syntax separated by space.
+    CONCATENATE fldname '=' iv_doc_id-value INTO cond_syntax SEPARATED BY space.
 
-    if iv_doc_id-target_table = 'CUSTOMER_H'.
-      select single O~guid from crmd_customer_h as c
-        left join crmd_orderadm_h as o on c~guid = o~guid and o~process_type = @iv_type
-        where (cond_syntax) into @ev_guid.
-    endif.
-
-  endmethod.
+    TRY.
+        IF iv_doc_id-target_table = 'CUSTOMER_H'.
+          SELECT SINGLE o~guid FROM crmd_customer_h AS c
+            LEFT JOIN crmd_orderadm_h AS o ON c~guid = o~guid AND o~process_type = @iv_type
+            WHERE (cond_syntax) INTO @ev_guid.
+        ENDIF.
+      CATCH cx_root INTO oref.
+        text = oref->get_text( ).
+    ENDTRY.
+    IF NOT text IS INITIAL.
+      MESSAGE text TYPE 'E'
+      RAISING error_mapping.
+    ENDIF.
+  ENDMETHOD.
 
 
   method get_attachments.
