@@ -14,7 +14,7 @@ The following content will be moved:
 + Ibase component (requieres mapping)
 + Custom fields from CUSTOMER_H (requires mapping)
 + Creation Information (Posting & Created Dates - Created by User)
-+ Transport (no changes in the managed system, just mapping)
++ Transport (no changes in the managed system, just table entrys)
 + Business Partners (requires mapping)
 
 - SLA
