@@ -14,17 +14,18 @@ The following content will be moved:
 + Ibase component (requieres mapping)
 + Custom fields from CUSTOMER_H (requires mapping)
 + Creation Information (Posting & Created Dates - Created by User)
++ Transport (no changes in the managed system, just mapping)
++ Business Partners (requires mapping)
 
 - SLA
 - Approval procedure
 - Links to other documents (CRM)
 - Scope
-! Transport
+
 
 - Status change history (CRM_JCDS)
 ! Multi-level category (requires mapping)
 - Reach Texts
-! Business Partners (requires mapping)
 ```
 
 # Instalation
