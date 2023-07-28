@@ -698,7 +698,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         IMPORTING
           et_transp_req_new  = lt_transports  ).
 
-    IF  ev_transports IS INITIAL.
+    IF lt_transports IS INITIAL.
       RETURN.
     ENDIF.
 
@@ -1131,7 +1131,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       ENDIF.
       ls_trordhc-originator_id = iv_guid.
       ls_trordhc-originator_key = iv_change_id.
-      "ls_trordhc-project_name =?.
+      ls_trordhc-project_name = lv_context-project_id.
       ls_trordhc-smi_project = lv_context-project_id.
 
 
