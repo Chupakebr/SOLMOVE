@@ -5,7 +5,7 @@
 *& Main report for moving document data from one solman to another
 *&
 *&---------------------------------------------------------------------*
-REPORT zmove.
+REPORT zmove LINE-SIZE 500.
 
 TYPES:
   BEGIN OF ts_obj_id_struct,
@@ -18,8 +18,16 @@ TYPES:
     guid      TYPE crmt_object_guid,
   END OF ts_order_data.
 
+TYPES:
+  BEGIN OF ts_output,
+    object_id	TYPE crmt_object_id_db,
+    message   TYPE char100,
+  END OF ts_output.
+
 DATA:
   lt_obj_id         TYPE TABLE OF ts_obj_id_struct WITH HEADER LINE,
+  lt_output         TYPE TABLE OF ts_output,
+  ls_output         TYPE ts_output,
   lr_obj_id         TYPE RANGE OF crmt_object_id_db,
   lt_orders_data    TYPE TABLE OF ts_order_data,
   ls_order_data     TYPE ts_order_data,
@@ -53,6 +61,8 @@ START-OF-SELECTION.
     LOOP AT lt_orders_data INTO ls_order_data.
       CLEAR: lt_messages.
       CLEAR: ls_doc_properties.
+      CLEAR: ls_output.
+      ls_output-object_id = ls_order_data-object_id.
 
       "get data to transfer
 
@@ -67,10 +77,8 @@ START-OF-SELECTION.
           error_no_target_ttype = 3
           OTHERS                = 4.
       IF sy-subrc <> 0.
-        WRITE: / 'Error reading document: '.
-        WRITE: ls_order_data-object_id.
-        WRITE: / 'Error id:'.
-        WRITE: sy-subrc.
+        ls_output-message = 'Error reading document.'.
+        APPEND ls_output TO lt_output.
       ELSE.
 
         IF p_update IS NOT INITIAL.
@@ -97,17 +105,18 @@ START-OF-SELECTION.
 
               LOOP AT lt_messages INTO ls_message.
                 "processing results:
-                WRITE: / ls_message. "Processed Message
+                ls_output-message = ls_message.
+                APPEND ls_output TO lt_output.
               ENDLOOP.
 
             CATCH cx_root INTO oref.
-              WRITE: 'Unhandled Error while creating document'.
+              ls_output-message = 'Unhandled Error while creating document'.
+              APPEND ls_output TO lt_output.
           ENDTRY.
 
         ELSE.
-          WRITE: / 'Test read for document: '.
-          WRITE: ls_order_data-object_id.
-          WRITE: 'successful'.
+          ls_output-message = 'Test read OK! '.
+          APPEND ls_output TO lt_output.
         ENDIF.
       ENDIF.
 
@@ -120,8 +129,27 @@ START-OF-SELECTION.
 
     ENDLOOP.
 
-    WRITE: / 'Total: '.
-    WRITE: lv_total_lines.
-    WRITE: ' documents was processed'.
+    CLEAR ls_output.
+    ls_output-object_id = lv_total_lines.
+    ls_output-message = 'Documents processed'.
+    APPEND ls_output TO lt_output.
+
+    cl_salv_table=>factory(
+      IMPORTING
+        r_salv_table = DATA(lo_alv)
+      CHANGING
+        t_table      = lt_output
+      ).
+
+
+    DATA(lo_functions) = lo_alv->get_functions( ).
+    lo_functions->set_all( ).
+
+    lo_alv->get_layout( )->set_save_restriction(
+        value = if_salv_c_layout=>restrict_none
+    ).
+
+    lo_alv->display( ).
+
 
   ENDIF.

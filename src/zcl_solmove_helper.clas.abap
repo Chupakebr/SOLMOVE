@@ -299,6 +299,12 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lo_cd->set_partners( EXPORTING it_partner = iv_documentprops-partners ).
     ENDIF.
 
+    "update creation information
+    CALL METHOD zcl_solmove_helper=>set_creation_info
+      EXPORTING
+        iv_guid           = lo_cd->get_guid( )
+        iv_doc_properties = iv_documentprops.
+
     "set status
     " !status set should be the last action to allow other changes for closed document!
     IF iv_documentprops-status IS NOT INITIAL.
@@ -312,12 +318,12 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 *    record document and return solution manager id and solution manager guid
     lo_cd->save( CHANGING cv_log_handle = lv_log_handle ).
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO lv_message.
+      APPEND lv_message TO ev_message.
+    ENDIF.
 
-*   update creation information
-    CALL METHOD zcl_solmove_helper=>set_creation_info
-      EXPORTING
-        iv_guid           = lo_cd->get_guid( )
-        iv_doc_properties = iv_documentprops.
+    COMMIT WORK.
 
 *    Check if document was created?
     lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
