@@ -36,11 +36,12 @@ public section.
     importing
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
-      !EV_TRANSPORTS type /TMWFLOW/TRORDHC_T .
+      !EV_TRANSPORTS type ZTRANSPORTS_TT .
   class-methods SET_TR
     importing
       !IV_GUID type CRMT_OBJECT_GUID
-      !EV_TRANSPORTS type /TMWFLOW/TRORDHC_T
+      !IV_TRANSPORTS type ZTRANSPORTS_TT
+      !IV_CHANGE_ID type CRMT_OBJECT_ID
     exceptions
       ERROR_TR_ALREADY_REGISTERED
       ERROR_TR_NOT_ADDED .
@@ -179,7 +180,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     ENDIF.
 
     "Create document
-    IF lo_cd IS NOT BOUND.
+    IF lo_cd IS NOT BOUND AND iv_documentprops-update IS INITIAL.
       cl_ags_crm_1o_api=>get_instance(
       EXPORTING
         iv_process_mode = gc_mode-create " Processing Mode of Transaction
@@ -252,30 +253,29 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           iv_type  = ls_orderadm_h-process_type
           iv_ibase = iv_documentprops-ibase
           iv_cycle = iv_documentprops-cycle.
-    ENDIF.
 
-    "set transports
-    IF iv_documentprops-transports IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>set_tr
-        EXPORTING
-          iv_guid                     = ls_orderadm_h-guid
-          ev_transports               = iv_documentprops-transports
-        EXCEPTIONS
-          error_tr_already_registered = 1
-          error_tr_not_added          = 2
-          OTHERS                      = 3.
-      IF sy-subrc <> 0.
-        CASE sy-subrc.
-          WHEN 1.
-            lv_message = 'Error: Transports already mapped in target system'.
-            APPEND lv_message TO ev_message.
-          WHEN OTHERS.
-            lv_message = 'Error: could not add transports to the created doc'.
-            APPEND lv_message TO ev_message.
-        ENDCASE.
+      "set transports
+      IF iv_documentprops-transports IS NOT INITIAL.
+        CALL METHOD zcl_solmove_helper=>set_tr
+          EXPORTING
+            iv_guid                     = ls_orderadm_h-guid
+            iv_transports               = iv_documentprops-transports
+            iv_change_id                = ls_orderadm_h-object_id
+          EXCEPTIONS
+            error_tr_already_registered = 1
+            error_tr_not_added          = 2
+            OTHERS                      = 3.
+        IF sy-subrc <> 0.
+          CASE sy-subrc.
+            WHEN 1.
+              lv_message = 'Error: Transports already mapped in target system'.
+              APPEND lv_message TO ev_message.
+            WHEN OTHERS.
+              lv_message = 'Error: could not add transports to the created doc'.
+              APPEND lv_message TO ev_message.
+          ENDCASE.
+        ENDIF.
       ENDIF.
-
-
     ENDIF.
 
     "add webui fields
@@ -686,20 +686,29 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
-  method get_tr.
-* Read transport requests
+  METHOD get_tr.
+* Read transport requests from /tmwflow/trord_n
+    DATA: lt_transports TYPE /TMWFLOW/TRORDHC_T,
+          ls_transport  TYPE /tmwflow/trordhc_s,
+          ls_tr_trans   TYPE ztr_data_st.
 
     /tmwflow/cl_transport_util=>get_chng_doc_transp_req(
-        exporting
+        EXPORTING
           iv_header_guid = iv_guid
-        importing
-          et_transp_req_new  = ev_transports  ).
+        IMPORTING
+          et_transp_req_new  = lt_transports  ).
 
-    if  ev_transports is initial.
-      return.
-    endif.
+    IF  ev_transports IS INITIAL.
+      RETURN.
+    ENDIF.
 
-  endmethod.
+    LOOP AT lt_transports INTO ls_transport.
+      CLEAR ls_tr_trans.
+      MOVE-CORRESPONDING ls_transport TO ls_tr_trans.
+      APPEND ls_tr_trans TO ev_transports.
+    ENDLOOP.
+
+  ENDMETHOD.
 
 
   method get_type.
@@ -774,7 +783,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     ls_bo-instid = iv_guid.
     ls_bo-typeid = IV_OBJECT_TYPE.
-    ls_bo-catid = 'BO'. "! Change
+    ls_bo-catid = 'BO'. " ! Change
 
     loop at iv_attach_list into ls_attachment.
 
@@ -1076,68 +1085,72 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
-  method set_tr.
-    data: ls_transport      type aic_s_cm_transport_req,
-          lo_transp_utility type ref to cl_ai_crm_action_utility,
-          lv_app_status	    type /tmwflow/smstatus,
-          lt_app_message    type balmi_t,
-          lt_err_message    type balmi_t.
+  METHOD set_tr.
+    "just update TABLE /tmwflow/trord_n
+    "(no changes in the managed system)
+    DATA: ls_transport TYPE ztr_data_st,
+          lt_trordhc   TYPE /tmwflow/trordhc_t,
+          ls_trordhc   TYPE /tmwflow/trordhc_s.
+    "Prepare missing information for the transport
+    SELECT SINGLE * FROM tsocm_cr_context INTO @DATA(lv_context)
+    WHERE guid = @iv_guid AND item_guid = @iv_guid .
 
-    loop at ev_transports into ls_transport.
-      select count(*) into @data(lv_tr) from /tmwflow/trord_n where trorder_number = @ls_transport-trorder_number.
-      if lv_tr > 0.
-        message id sy-msgid type sy-msgty number sy-msgno
-        with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
-        raising error_tr_already_registered.
-        exit.
-      endif.
-    endloop.
-    "Assigne tr (without checks)
-    "how to do in a correct way see i.e.
-    "in /SALM/CL_CRMUI5_SERVICE_DATA->DO_ASSIGN_TRANSPORT_REQS
+    SELECT SINGLE * FROM aic_release_cycl INTO @DATA(lv_rel)
+    WHERE smi_project = @lv_context-project_id.
 
-    create object lo_transp_utility
-      exporting
-        iv_crm_doc_id     = iv_guid
-      exceptions
-        err_with_document = 1.
+    LOOP AT iv_transports INTO ls_transport.
+      SELECT COUNT(*) INTO @DATA(lv_tr) FROM /tmwflow/trord_n WHERE trorder_number = @ls_transport-trorder_number.
+      IF lv_tr > 0.
+        "transport already assigned.
+        "can be deleted with FM /TMWFLOW/TS_DELETE_TRORDER_HDR
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+        RAISING error_tr_already_registered.
+        CONTINUE.
+      ENDIF.
 
-    if sy-subrc <> 0.
-      message id sy-msgid type sy-msgty number sy-msgno
-      with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
-      raising error_tr_not_added.
-      exit.
-    else.
-      lo_transp_utility->assign_transp_request(
-        exporting
-          it_transp_req      = ev_transports
-        importing
-          ev_app_status      = lv_app_status
-          et_app_message     = lt_app_message
-          et_err_message     = lt_err_message
-        exceptions
-          action_not_allowed = 1
-          others             = 2 ).
+      "Assigne tr (without checks)
+      "how to do in a correct way see i.e.:
+      "in /SALM/CL_CRMUI5_SERVICE_DATA->DO_ASSIGN_TRANSPORT_REQS
+      "we do this in direct way, without any checks
+      "update ChaRM database table from 'FM /TMWFLOW/REGISTER_TR_TO_TL')
 
-      if sy-subrc <> 0.
-        message id sy-msgid type sy-msgty number sy-msgno
-        with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
-        raising error_tr_not_added.
-        exit.
-*            et_msg = lt_err_message.
-*        LOOP AT lt_err_message ASSIGNING <fs_message>.
-*          lo_msg_service->add_message(
-*            iv_msg_id      = <fs_message>-msgid
-*            iv_msg_type    = <fs_message>-msgty
-*            iv_msg_number  = <fs_message>-msgno
-*            iv_msg_v1      = <fs_message>-msgv1
-*            iv_msg_v2      = <fs_message>-msgv2
-*            iv_msg_v3      = <fs_message>-msgv3
-*            iv_msg_v4      = <fs_message>-msgv4 ).
-*        ENDLOOP.
-      endif.
-    endif.
-  endmethod.
+      SELECT SINGLE * FROM /tmwflow/ttrckhn INTO @DATA(ls_track_hdr)
+        WHERE tasklist = @lv_rel-tasklist_id
+        AND status   = @/tmwflow/cl_constants=>con_config_stat-active
+        AND src_sys_name = @ls_transport-sys_name
+        AND src_sys_type = @ls_transport-sys_type
+        AND src_sys_client = @ls_transport-sys_client.
+
+      MOVE-CORRESPONDING ls_transport TO ls_trordhc.
+      " !but we are not changing CTS_IT = Inconsistancy
+      ls_trordhc-tasklist = lv_rel-tasklist_id.
+      IF ls_track_hdr IS NOT INITIAL.
+        " !possible inconsistance
+        ls_trordhc-transport_track = ls_track_hdr-transport_track.
+      ENDIF.
+      ls_trordhc-originator_id = iv_guid.
+      ls_trordhc-originator_key = iv_change_id.
+      "ls_trordhc-project_name =?.
+      ls_trordhc-smi_project = lv_context-project_id.
+
+
+
+      APPEND ls_trordhc TO lt_trordhc.
+    ENDLOOP.
+
+    CALL FUNCTION '/TMWFLOW/TS_UPDATE_TRORDER_HDR'
+      EXPORTING
+        it_trordhc    = lt_trordhc
+      EXCEPTIONS
+        update_failed = 1
+        OTHERS        = 2.
+    IF sy-subrc <> 0.
+      MESSAGE    e177(/tmwflow/tasklist)           "error writing table
+         WITH    '/TMWFLOW/TRORD_N'
+         RAISING error_tr_not_added.
+    ENDIF.
+  ENDMETHOD.
 
 
   method set_webui_fields.
