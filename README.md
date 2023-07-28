@@ -19,7 +19,7 @@ The following content will be moved:
 
 - SLA
 - Approval procedure
-- Links to other documents (CRM)
+! Links to other documents (CRM)
 - Scope
 
 
