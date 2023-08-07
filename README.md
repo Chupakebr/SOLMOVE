@@ -17,9 +17,9 @@ The following content will be moved:
 + Transport (no changes in the managed system, just table entrys)
 + Business Partners (requires mapping)
 
-- SLA
+! SLA
 - Approval procedure
-! Links to other documents (CRM)
+- Links to other documents (CRM)
 - Scope
 
 
