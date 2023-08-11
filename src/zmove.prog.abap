@@ -35,7 +35,8 @@ DATA:
   ls_doc_properties TYPE zdoc_props_struct,
   lt_messages       TYPE zprocess_log_tt,
   ls_message        TYPE tdline,
-  oref              TYPE REF TO cx_root.
+  oref              TYPE REF TO cx_root,
+  lv_answer_odpc    TYPE char1.
 
 SELECT-OPTIONS p_obj_id FOR lt_obj_id-obj_id NO INTERVALS DEFAULT 8000000060.
 PARAMETERS p_rfc    TYPE rfcdwf DEFAULT 'NONE'.
@@ -53,19 +54,61 @@ START-OF-SELECTION.
     WHERE business_transaction~object_id IN @p_obj_id
     AND  business_transaction~process_type = @p_ttype
     INTO TABLE @lt_orders_data.
-
-  lv_total_lines = lines( lt_orders_data ).
-
   IF sy-subrc EQ 0.
+
+    IF p_update IS INITIAL and p_test IS INITIAL.
+      CALL FUNCTION 'POPUP_TO_CONFIRM'
+        EXPORTING
+          titlebar              = text-001
+          text_question         = text-002
+          text_button_1         = text-003
+          text_button_2         = text-004
+          default_button        = '1'
+          display_cancel_button = 'X'
+        IMPORTING
+          answer                = lv_answer_odpc
+        EXCEPTIONS
+          OTHERS                = 1.
+      IF lv_answer_odpc = '2'.
+        p_update = 'X'.
+      ELSEIF  lv_answer_odpc = 'A'.
+        EXIT.
+      ENDIF.
+    ENDIF.
+
+    IF p_status IS NOT INITIAL and p_test IS INITIAL.
+      CALL FUNCTION 'POPUP_TO_CONFIRM'
+        EXPORTING
+          titlebar              = text-005
+          text_question         = text-006
+          text_button_1         = text-007
+          text_button_2         = text-008
+          default_button        = '1'
+          display_cancel_button = 'X'
+        IMPORTING
+          answer                = lv_answer_odpc
+        EXCEPTIONS
+          OTHERS                = 1.
+      IF lv_answer_odpc = '2'.
+        p_status = ''.
+      ELSEIF  lv_answer_odpc = 'A'.
+        EXIT.
+      ENDIF.
+    ENDIF.
+
+    lv_total_lines = lines( lt_orders_data ).
 
     LOOP AT lt_orders_data INTO ls_order_data.
       CLEAR: lt_messages.
       CLEAR: ls_doc_properties.
       CLEAR: ls_output.
+      IF p_update = 'X'.
+        ls_doc_properties-update = 'X'.
+      ENDIF.
+
       ls_output-object_id = ls_order_data-object_id.
 
       "get data to transfer
-
       CALL METHOD zcl_solmove_helper=>get_doc_data
         EXPORTING
           iv_guid               = ls_order_data-guid
@@ -81,10 +124,6 @@ START-OF-SELECTION.
         APPEND ls_output TO lt_output.
       ELSE.
 
-        IF p_update IS NOT INITIAL.
-          ls_doc_properties-update = 'X'.
-        ENDIF.
-
         IF p_status IS INITIAL.
           CLEAR ls_doc_properties-status.
           CLEAR ls_doc_properties-stat_hist.
@@ -93,7 +132,6 @@ START-OF-SELECTION.
         IF p_test IS INITIAL.
 
           TRY.
-
               "call RFC to create documnet in target system
               CALL FUNCTION 'Z_CREATE_DOC'
                 DESTINATION p_rfc
