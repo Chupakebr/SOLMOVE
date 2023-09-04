@@ -136,63 +136,163 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   METHOD create_bp.
-    DATA lt_messages TYPE bapiret2_t.
+    DATA: lt_messages       TYPE bapiret2_t,
+          ls_return_bp      TYPE bapiret2,
+          lv_message        TYPE tdline,
+          lv_partner_guid   TYPE bu_partner_guid,
+          ls_bpdata         TYPE zbp_data,
+          lv_bp_role_bup001 TYPE bapibus1006_bproles,
+          lv_partner_guid_t TYPE bu_partner_guid,
+          ls_bp3            TYPE bapibus1006_bp_addr,
+          lt_bp3            TYPE TABLE OF bapibus1006_bp_addr.
+    DATA ls_bus000 TYPE  bus000.
+    DATA lv_person_id TYPE personid.
 
-    CALL FUNCTION 'BUPA_CREATE_FROM_DATA'
+    "check if bp exists
+    CALL FUNCTION 'BP_CENTRALPERSON_GET'
       EXPORTING
-*       IV_PARTNER      =
-*       IV_PARTNER_GUID =
-        iv_category     = iv_bp_data-category
-        iv_group        = iv_bp_data-group
-        is_data         = iv_bp_data-data
-        is_data_person  = iv_bp_data-data_person
-        is_data_organ   = iv_bp_data-data_organ
-        is_data_group   = iv_bp_data-data_group
-*       IS_ADDRESS      =
-*       IV_TESTRUN      = ' '
-*       IV_DUPLICATE_MESSAGE_TYPE            =
-        iv_accept_error = 'X'
-        iv_x_save       = 'X'
-*       IV_CONSIDER_CONSNUMBER_FOR_INS       = ' '
-*       IV_CHECK_ADDRESS                     = 'X'
+*       IV_PERSON_ID       =
+*       IV_BU_PARTNER_GUID =
+*       IV_EMPLOYEE_ID     =
+        iv_username        = iv_bp_data-user
       IMPORTING
-        ev_partner      = ev_partner
-*       ev_partner_guid =
-*       EV_ADDRNUMBER   =
-*       EV_ADDRGUID     =
-      TABLES
-        it_adtel        = iv_bp_data-adtel_addr_ind
-*       IT_ADFAX        =
-*       IT_ADTTX        =
-*       IT_ADTLX        =
-        it_adsmtp       = iv_bp_data-adsmtp_addr_ind
-*       IT_ADRML        =
-*       IT_ADX400       =
-*       IT_ADRFC        =
-*       IT_ADPRT        =
-*       IT_ADSSF        =
-*       IT_ADURI        =
-*       IT_ADPAG        =
-*       IT_ADREM        =
-*       IT_ADCOMREM     =
-*       IT_ADCOMUSE     =
-*       IT_ADTEL_ADDR_IND                    = iv_bp_data-adtel_addr_ind
-*       IT_ADFAX_ADDR_IND                    =
-*       IT_ADTTX_ADDR_IND                    =
-*       IT_ADTLX_ADDR_IND                    =
-*       IT_ADSMTP_ADDR_IND                   =
-*       IT_ADRML_ADDR_IND                    =
-*       IT_ADX400_ADDR_IND                   =
-*       IT_ADRFC_ADDR_IND                    =
-*       IT_ADPRT_ADDR_IND                    =
-*       IT_ADSSF_ADDR_IND                    =
-*       IT_ADURI_ADDR_IND                    =
-*       IT_ADPAG_ADDR_IND                    =
-*       IT_ADCOMREM_ADDR_IND                 =
-*       IT_ADCOMUSE_ADDR_IND                 =
-        et_return       = lt_messages
-*       ET_ADDR_DUPLICATES                   =
+*       ev_person_id       = ev_partner
+        ev_bu_partner_guid = lv_partner_guid
+*       EV_USERNAME        =
+*       ET_EMPLOYEE_ID     =
+*       EV_NAME            =
+*       ET_USERS           =
+*       ET_EMPLOYEE_ID_STAT2       =
+*     EXCEPTIONS
+*       NO_CENTRAL_PERSON  = 1
+*       NO_BUSINESS_PARTNER        = 2
+*       NO_ID              = 3
+*       OTHERS             = 4
       .
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+    IF lv_partner_guid IS NOT INITIAL.
+      CONCATENATE  'BP:' ev_partner 'found for user' iv_bp_data-user INTO lv_message SEPARATED BY space.
+      APPEND lv_message TO ev_message.
+    ENDIF.
+
+    LOOP AT iv_bp_data-adsmtp_addr_ind INTO DATA(ls_mails).
+
+      CALL FUNCTION 'BAPI_BUPA_SEARCH'
+        EXPORTING
+          email        = ls_mails-e_mail
+        TABLES
+          searchresult = lt_bp3
+          return       = lt_messages.
+
+
+      READ TABLE lt_bp3 INTO ls_bp3 INDEX 1.
+      ev_partner = ls_bp3-partner.
+      EXIT.
+    ENDLOOP.
+
+    IF ev_partner IS NOT INITIAL.
+      CONCATENATE  'BP:' ev_partner 'found for mail' ls_mails-e_mail INTO lv_message SEPARATED BY space.
+      APPEND lv_message TO ev_message.
+    ENDIF.
+
+    IF ev_partner IS INITIAL.
+      "if not exists create
+      CLEAR ls_return_bp.
+      CALL FUNCTION 'BUPA_CREATE_FROM_DATA'
+        EXPORTING
+          iv_category     = iv_bp_data-category
+          iv_group        = iv_bp_data-group
+          is_data         = iv_bp_data-data
+          is_data_person  = iv_bp_data-data_person
+          is_data_organ   = iv_bp_data-data_organ
+          is_data_group   = iv_bp_data-data_group
+          is_address      = iv_bp_data-address
+          iv_accept_error = 'X'
+        IMPORTING
+          ev_partner      = ev_partner
+          ev_partner_guid = lv_partner_guid
+        TABLES
+          it_adtel        = iv_bp_data-adtel_addr_ind
+          it_adsmtp       = iv_bp_data-adsmtp_addr_ind
+          et_return       = lt_messages.
+
+      READ TABLE lt_messages INDEX 1 INTO ls_return_bp.
+      IF sy-subrc = 0.
+        lv_message = ls_return_bp.
+        APPEND lv_message TO ev_message.
+        CONCATENATE  'Creation of bp:' ev_partner 'failed' INTO lv_message SEPARATED BY space.
+        APPEND lv_message TO ev_message.
+        CLEAR ev_partner.
+        RETURN.
+      ENDIF.
+
+      IF ev_partner IS NOT INITIAL.
+        LOOP AT ls_bpdata-bproles INTO lv_bp_role_bup001.
+          "add roles to BP
+          CALL FUNCTION 'BAPI_BUPA_ROLE_ADD_2'
+            EXPORTING
+              businesspartner             = ev_partner
+              differentiationtypevalue    = lv_bp_role_bup001-difftypevalue
+              businesspartnerrolecategory = lv_bp_role_bup001-partnerrolecategory
+              businesspartnerrole         = lv_bp_role_bup001-partnerrole
+              validfromdate               = lv_bp_role_bup001-valid_from
+              validuntildate              = lv_bp_role_bup001-valid_to
+            TABLES
+              return                      = lt_messages.
+
+          READ TABLE lt_messages INDEX 1 INTO ls_return_bp.
+          IF sy-subrc = 0.
+            lv_message = ls_return_bp.
+            APPEND lv_message TO ev_message.
+            lv_message =  'Creation of role failed'.
+            APPEND lv_message TO ev_message.
+          ENDIF.
+        ENDLOOP.
+
+        "create central person?
+        ls_bus000-partner = ev_partner.
+
+        CALL FUNCTION 'BP_BUPA_CREATECENTRALPERSON'
+          EXPORTING
+            iv_bu_partner_guid      = lv_partner_guid
+            iv_no_commit            = 'X'
+            is_bus000               = ls_bus000
+          IMPORTING
+            ev_person_id            = lv_person_id
+          EXCEPTIONS
+            buffer_mode_not_allowed = 1
+            OTHERS                  = 2.
+
+        IF sy-subrc <> 0.
+*
+        ENDIF.
+
+        "Step-4: set central persons name
+        CALL FUNCTION 'BP_CENTRALPERSON_ASSIGN_USER'
+          EXPORTING
+            iv_person_id     = lv_person_id
+            iv_user_id       = iv_bp_data-user
+            iv_no_commit     = 'X' "done in next step
+*           IV_ASYNCHRON     = ' '
+*           IV_WITH_AUTHORITY = 'X'
+*           IV_BUFFER_MODE   = ' '
+          EXCEPTIONS
+            no_authorization = 1
+            invalid_data     = 2
+            no_application   = 3
+            OTHERS           = 4.
+
+        IF sy-subrc <> 0.
+          "
+        ENDIF.
+
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+      ENDIF.
+    ENDIF.
 
   ENDMETHOD.
 

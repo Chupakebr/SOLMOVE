@@ -13,7 +13,7 @@ TYPES:
     message   TYPE char100,
   END OF ts_output.
 
-TABLES zsolmove_mapping.
+TABLES: but000, zsolmove_mapping.
 
 DATA:
   lv_part_c      TYPE bu_partner,
@@ -25,16 +25,20 @@ DATA:
   ls_bpdata      TYPE zbp_data,
   lv_oref        TYPE REF TO cx_root,
   lv_mapp        TYPE zsolmove_mapping,
+  lv_person_id   TYPE personid,
   lv_total_lines TYPE i.
 
+
+SELECT-OPTIONS p_obj_id FOR but000-partner NO INTERVALS DEFAULT 1.
 PARAMETERS p_rfc    TYPE rfcdwf DEFAULT 'NONE'.
 PARAMETERS p_test   AS CHECKBOX DEFAULT 'X'.
 
 START-OF-SELECTION.
 
-  SELECT partner, mapp~source FROM but000
+  SELECT partner, partner_guid, mapp~source FROM but000
     LEFT JOIN zsolmove_mapping AS mapp ON but000~partner = mapp~source AND mapp~type = 'BP'
-    WHERE mapp~source IS NULL
+    WHERE partner IN @p_obj_id AND
+    mapp~source IS NULL
     INTO TABLE @DATA(lt_partners)
         UP TO 1 ROWS.
 
@@ -50,9 +54,6 @@ START-OF-SELECTION.
     CALL FUNCTION 'BUPA_CENTRAL_GET_DETAIL'
       EXPORTING
         iv_partner            = lv_part_c
-*       IV_PARTNER_GUID       =
-*       IV_VALID_DATE         = SY-DATLO
-*       IV_REQ_MASK           = 'X'
       IMPORTING
         es_data               = ls_bpdata-data
         es_data_person        = ls_bpdata-data_person
@@ -62,24 +63,45 @@ START-OF-SELECTION.
         ev_category           = ls_bpdata-category
         ev_group              = ls_bpdata-group
         ev_fullname_converted = ls_bpdata-fullname_converted
-*       ES_CENTRAL_VALIDITY   =
-*       ES_CENTRAL_CUSTOMER_EXT       =
       TABLES
         et_adtel_addr_ind     = ls_bpdata-adtel_addr_ind
-*        et_adfax_addr_ind     = ls_bpdata-adfax_addr_ind
-*        et_adttx_addr_ind     = ls_bpdata-adttx_addr_ind
-*        et_adtlx_addr_ind     = ls_bpdata-adtlx_addr_ind
         et_adsmtp_addr_ind    = ls_bpdata-adsmtp_addr_ind.
-*        et_adrml_addr_ind     = ls_bpdata-adrml_addr_ind
-*        et_adx400_addr_ind    = ls_bpdata-adx400_addr_ind
-*        et_adrfc_addr_ind     = ls_bpdata-adrfc_addr_ind
-*        et_adprt_addr_ind     = ls_bpdata-adprt_addr_ind
-*        et_adssf_addr_ind     = ls_bpdata-adssf_addr_ind
-*        et_aduri_addr_ind     = ls_bpdata-aduri_addr_ind
-*        et_adpag_addr_ind     = ls_bpdata-adpag_addr_ind
-*        et_adcomrem_addr_ind  = ls_bpdata-adcomrem_addr_ind
-*        et_adcomuse_addr_ind  = ls_bpdata-adcomuse_addr_ind
-*        et_return             = ls_bpdata-return.
+
+    CALL FUNCTION 'BAPI_BUPA_ADDRESS_GETDETAIL'
+      EXPORTING
+        businesspartner = lv_part_c
+      IMPORTING
+        addressdata     = ls_bpdata-address.
+
+    CALL FUNCTION 'BAPI_BUPA_ROLES_GET_2'
+      EXPORTING
+        businesspartner      = lv_part_c
+*       VALIDDATE            = SY-DATLO
+      TABLES
+        businesspartnerroles = ls_bpdata-bproles
+*       RETURN               =
+      .
+
+    "Step-3a: get central person
+
+    CALL FUNCTION 'BP_CENTRALPERSON_GET'
+      EXPORTING
+*       IV_PERSON_ID        =
+        iv_bu_partner_guid  = lv_partner-partner_guid
+*       IV_EMPLOYEE_ID      =
+*       IV_USERNAME         =
+      IMPORTING
+        ev_person_id        = lv_person_id
+*       ev_bu_partner_guid  =
+        ev_username         = ls_bpdata-user
+*       ET_EMPLOYEE_ID      =
+*       EV_NAME             =
+*       ET_USERS            =
+      EXCEPTIONS
+        no_central_person   = 1
+        no_business_partner = 2
+        no_id               = 3
+        OTHERS              = 4.
 
     IF p_test IS INITIAL.
 
@@ -104,25 +126,25 @@ START-OF-SELECTION.
           i_total              = lv_total_lines
           i_output_immediately = abap_false ).
 
+
+
         CATCH cx_root INTO lv_oref.
           ls_output-message = 'Unhandled Error while creating document'.
           APPEND ls_output TO lt_output.
       ENDTRY.
+      IF lv_part_t IS NOT INITIAL.
+        lv_mapp-type = 'BP'.
+        lv_mapp-source = lv_part_c.
+        lv_mapp-target = lv_part_t.
+        MODIFY zsolmove_mapping FROM lv_mapp.
+        CONCATENATE lv_part_t 'mapping added' INTO ls_output-message SEPARATED BY space.
+        APPEND ls_output TO lt_output.
+      ENDIF.
 
     ELSE.
       ls_output-message = 'Test read OK! '.
       APPEND ls_output TO lt_output.
     ENDIF.
-
-    lv_mapp-type = 'BP'.
-    lv_mapp-source = lv_part_c.
-    lv_mapp-target = lv_part_t.
-
-
-    MODIFY zsolmove_mapping FROM lv_mapp.
-
-    CONCATENATE lv_part_t 'mapping added' INTO ls_output-message SEPARATED BY space.
-    APPEND ls_output TO lt_output.
 
   ENDLOOP.
 
