@@ -5,12 +5,6 @@ class ZCL_SOLMOVE_HELPER definition
 
 public section.
 
-  class-methods CREATE_BP
-    importing
-      !IV_BP_DATA type ZBP_DATA
-    exporting
-      !EV_MESSAGE type ZPROCESS_LOG_TT
-      !EV_PARTNER type BU_PARTNER .
   class-methods FIND_DOC
     importing
       !IV_DOC_ID type ZCUSTOM_FIELDS
@@ -133,68 +127,6 @@ ENDCLASS.
 
 
 CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
-
-
-  METHOD create_bp.
-    DATA lt_messages TYPE bapiret2_t.
-
-    CALL FUNCTION 'BUPA_CREATE_FROM_DATA'
-      EXPORTING
-*       IV_PARTNER      =
-*       IV_PARTNER_GUID =
-        iv_category     = iv_bp_data-category
-        iv_group        = iv_bp_data-group
-        is_data         = iv_bp_data-data
-        is_data_person  = iv_bp_data-data_person
-        is_data_organ   = iv_bp_data-data_organ
-        is_data_group   = iv_bp_data-data_group
-*       IS_ADDRESS      =
-*       IV_TESTRUN      = ' '
-*       IV_DUPLICATE_MESSAGE_TYPE            =
-        iv_accept_error = 'X'
-        iv_x_save       = 'X'
-*       IV_CONSIDER_CONSNUMBER_FOR_INS       = ' '
-*       IV_CHECK_ADDRESS                     = 'X'
-      IMPORTING
-        ev_partner      = ev_partner
-*       ev_partner_guid =
-*       EV_ADDRNUMBER   =
-*       EV_ADDRGUID     =
-      TABLES
-        it_adtel        = iv_bp_data-adtel_addr_ind
-*       IT_ADFAX        =
-*       IT_ADTTX        =
-*       IT_ADTLX        =
-        it_adsmtp       = iv_bp_data-adsmtp_addr_ind
-*       IT_ADRML        =
-*       IT_ADX400       =
-*       IT_ADRFC        =
-*       IT_ADPRT        =
-*       IT_ADSSF        =
-*       IT_ADURI        =
-*       IT_ADPAG        =
-*       IT_ADREM        =
-*       IT_ADCOMREM     =
-*       IT_ADCOMUSE     =
-*       IT_ADTEL_ADDR_IND                    = iv_bp_data-adtel_addr_ind
-*       IT_ADFAX_ADDR_IND                    =
-*       IT_ADTTX_ADDR_IND                    =
-*       IT_ADTLX_ADDR_IND                    =
-*       IT_ADSMTP_ADDR_IND                   =
-*       IT_ADRML_ADDR_IND                    =
-*       IT_ADX400_ADDR_IND                   =
-*       IT_ADRFC_ADDR_IND                    =
-*       IT_ADPRT_ADDR_IND                    =
-*       IT_ADSSF_ADDR_IND                    =
-*       IT_ADURI_ADDR_IND                    =
-*       IT_ADPAG_ADDR_IND                    =
-*       IT_ADCOMREM_ADDR_IND                 =
-*       IT_ADCOMUSE_ADDR_IND                 =
-        et_return       = lt_messages
-*       ET_ADDR_DUPLICATES                   =
-      .
-
-  ENDMETHOD.
 
 
   METHOD create_doc.
@@ -367,11 +299,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lo_cd->set_partners( EXPORTING it_partner = iv_documentprops-partners ).
     ENDIF.
 
-    "update creation information
-    CALL METHOD zcl_solmove_helper=>set_creation_info
-      EXPORTING
-        iv_guid           = lo_cd->get_guid( )
-        iv_doc_properties = iv_documentprops.
+
 
     "set status
     " !status set should be the last action to allow other changes for closed document!
@@ -392,6 +320,13 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     ENDIF.
 
     COMMIT WORK.
+
+    "update creation information
+    CALL METHOD zcl_solmove_helper=>set_creation_info
+      EXPORTING
+        iv_guid           = lo_cd->get_guid( )
+        iv_doc_properties = iv_documentprops.
+
 
 *    Check if document was created?
     lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
@@ -616,6 +551,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     lt_doc_properties-posting_date = ls_orderadm_h-posting_date.
     lt_doc_properties-created_at = ls_orderadm_h-created_at.
     lt_doc_properties-created_by = ls_orderadm_h-created_by.
+    lt_doc_properties-changed_at = ls_orderadm_h-changed_at.
+    lt_doc_properties-changed_by = ls_orderadm_h-changed_by.
     lo_api_object->get_priority( IMPORTING ev_priority = lt_doc_properties-priority ).
     lo_api_object->get_category( IMPORTING ev_category = lt_doc_properties-category ).
 
@@ -911,11 +848,15 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     DATA(lv_posting_date) = iv_doc_properties-posting_date.
     DATA(lv_created_at) = iv_doc_properties-created_at.
     DATA(lv_created_by) = iv_doc_properties-created_by.
+    DATA(lv_changed_at) = iv_doc_properties-changed_at.
+    DATA(lv_changed_by) = iv_doc_properties-changed_by.
 
     UPDATE crmd_orderadm_h
         SET posting_date = @lv_posting_date,
         created_at = @lv_created_at,
-        created_by = @lv_created_by
+        created_by = @lv_created_by,
+        changed_at = @lv_changed_at,
+        changed_by = @lv_changed_by
       WHERE guid EQ @iv_guid.
 
   ENDMETHOD.
