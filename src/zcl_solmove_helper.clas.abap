@@ -5,12 +5,6 @@ class ZCL_SOLMOVE_HELPER definition
 
 public section.
 
-  class-methods CREATE_BP
-    importing
-      !IV_BP_DATA type ZBP_DATA
-    exporting
-      !EV_MESSAGE type ZPROCESS_LOG_TT
-      !EV_PARTNER type BU_PARTNER .
   class-methods FIND_DOC
     importing
       !IV_DOC_ID type ZCUSTOM_FIELDS
@@ -296,7 +290,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
   ENDMETHOD.
 
-
   METHOD create_doc.
 
     INCLUDE: crm_mode_con. "Include with standard CRM constants
@@ -467,11 +460,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lo_cd->set_partners( EXPORTING it_partner = iv_documentprops-partners ).
     ENDIF.
 
-    "update creation information
-    CALL METHOD zcl_solmove_helper=>set_creation_info
-      EXPORTING
-        iv_guid           = lo_cd->get_guid( )
-        iv_doc_properties = iv_documentprops.
+
 
     "set status
     " !status set should be the last action to allow other changes for closed document!
@@ -492,6 +481,13 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     ENDIF.
 
     COMMIT WORK.
+
+    "update creation information
+    CALL METHOD zcl_solmove_helper=>set_creation_info
+      EXPORTING
+        iv_guid           = lo_cd->get_guid( )
+        iv_doc_properties = iv_documentprops.
+
 
 *    Check if document was created?
     lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
@@ -716,6 +712,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     lt_doc_properties-posting_date = ls_orderadm_h-posting_date.
     lt_doc_properties-created_at = ls_orderadm_h-created_at.
     lt_doc_properties-created_by = ls_orderadm_h-created_by.
+    lt_doc_properties-changed_at = ls_orderadm_h-changed_at.
+    lt_doc_properties-changed_by = ls_orderadm_h-changed_by.
     lo_api_object->get_priority( IMPORTING ev_priority = lt_doc_properties-priority ).
     lo_api_object->get_category( IMPORTING ev_category = lt_doc_properties-category ).
 
@@ -1011,11 +1009,15 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     DATA(lv_posting_date) = iv_doc_properties-posting_date.
     DATA(lv_created_at) = iv_doc_properties-created_at.
     DATA(lv_created_by) = iv_doc_properties-created_by.
+    DATA(lv_changed_at) = iv_doc_properties-changed_at.
+    DATA(lv_changed_by) = iv_doc_properties-changed_by.
 
     UPDATE crmd_orderadm_h
         SET posting_date = @lv_posting_date,
         created_at = @lv_created_at,
-        created_by = @lv_created_by
+        created_by = @lv_created_by,
+        changed_at = @lv_changed_at,
+        changed_by = @lv_changed_by
       WHERE guid EQ @iv_guid.
 
   ENDMETHOD.
