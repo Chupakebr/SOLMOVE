@@ -9,6 +9,44 @@
    </INCLUDES>
    <FUNCTIONS>
     <item>
+     <FUNCNAME>Z_CREATE_BP</FUNCNAME>
+     <REMOTE_CALL>R</REMOTE_CALL>
+     <SHORT_TEXT>Create bp</SHORT_TEXT>
+     <IMPORT>
+      <RSIMP>
+       <PARAMETER>IV_BP_DATA</PARAMETER>
+       <TYP>ZBP_DATA</TYP>
+      </RSIMP>
+     </IMPORT>
+     <EXPORT>
+      <RSEXP>
+       <PARAMETER>EV_PARTNER</PARAMETER>
+       <TYP>BU_PARTNER</TYP>
+      </RSEXP>
+      <RSEXP>
+       <PARAMETER>ET_MESSAGES</PARAMETER>
+       <TYP>ZPROCESS_LOG_TT</TYP>
+      </RSEXP>
+     </EXPORT>
+     <DOCUMENTATION>
+      <RSFDO>
+       <PARAMETER>IV_BP_DATA</PARAMETER>
+       <KIND>P</KIND>
+       <STEXT>BP data</STEXT>
+      </RSFDO>
+      <RSFDO>
+       <PARAMETER>EV_PARTNER</PARAMETER>
+       <KIND>P</KIND>
+       <STEXT>Business Partner Number</STEXT>
+      </RSFDO>
+      <RSFDO>
+       <PARAMETER>ET_MESSAGES</PARAMETER>
+       <KIND>P</KIND>
+       <STEXT>Processing log for document</STEXT>
+      </RSFDO>
+     </DOCUMENTATION>
+    </item>
+    <item>
      <FUNCNAME>Z_CREATE_DOC</FUNCNAME>
      <REMOTE_CALL>X</REMOTE_CALL>
      <SHORT_TEXT>Create CRM document</SHORT_TEXT>
