@@ -4,7 +4,12 @@ class ZCL_SOLMOVE_HELPER definition
   create public .
 
 public section.
-
+  class-methods CREATE_BP
+    importing
+      !IV_BP_DATA type ZBP_DATA
+    exporting
+      !EV_MESSAGE type ZPROCESS_LOG_TT
+      !EV_PARTNER type BU_PARTNER .
   class-methods FIND_DOC
     importing
       !IV_DOC_ID type ZCUSTOM_FIELDS
