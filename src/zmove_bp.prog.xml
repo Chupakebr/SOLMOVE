@@ -17,6 +17,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_OBJ_ID</KEY>
+     <ENTRY>BP ID</ENTRY>
+     <LENGTH>13</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_RFC</KEY>
      <ENTRY>Target RFC</ENTRY>
      <LENGTH>18</LENGTH>
