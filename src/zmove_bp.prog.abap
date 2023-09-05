@@ -36,21 +36,29 @@ PARAMETERS p_test   AS CHECKBOX DEFAULT 'X'.
 
 START-OF-SELECTION.
 
-ls_bpdata-create = p_create.
-
   SELECT partner, partner_guid, mapp~source FROM but000
     LEFT JOIN zsolmove_mapping AS mapp ON but000~partner = mapp~source AND mapp~type = 'BP'
-    WHERE partner IN @p_obj_id AND
-    mapp~source IS NULL
-    INTO TABLE @DATA(lt_partners)
-        UP TO 1 ROWS.
+    WHERE partner IN @p_obj_id
+    AND mapp~source IS NULL
+    INTO TABLE @DATA(lt_partners).
 
   lv_total_lines = lines( lt_partners ).
 
   LOOP AT lt_partners INTO DATA(lv_partner).
+
+    cl_progress_indicator=>progress_indicate(
+    i_text               = 'Processed &1 % (&2 of &3 records)'
+    i_processed          = sy-tabix
+    i_total              = lv_total_lines
+    i_output_immediately = abap_false ).
+
+
+
     lv_part_c = lv_partner.
     CLEAR ls_bpdata.
     CLEAR lv_mapp.
+
+    ls_bpdata-create = p_create.
 
     ls_output-object_id = lv_partner.
 
@@ -122,14 +130,6 @@ ls_bpdata-create = p_create.
             ls_output-message = ls_message.
             APPEND ls_output TO lt_output.
           ENDLOOP.
-
-          cl_progress_indicator=>progress_indicate(
-          i_text               = 'Processed &1 % (&2 of &3 records)'
-          i_processed          = sy-tabix
-          i_total              = lv_total_lines
-          i_output_immediately = abap_false ).
-
-
 
         CATCH cx_root INTO lv_oref.
           ls_output-message = 'Unhandled Error while creating document'.
