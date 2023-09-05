@@ -31,9 +31,12 @@ DATA:
 
 SELECT-OPTIONS p_obj_id FOR but000-partner NO INTERVALS DEFAULT 1.
 PARAMETERS p_rfc    TYPE rfcdwf DEFAULT 'NONE'.
+PARAMETERS p_create   AS CHECKBOX DEFAULT ''.
 PARAMETERS p_test   AS CHECKBOX DEFAULT 'X'.
 
 START-OF-SELECTION.
+
+ls_bpdata-create = p_create.
 
   SELECT partner, partner_guid, mapp~source FROM but000
     LEFT JOIN zsolmove_mapping AS mapp ON but000~partner = mapp~source AND mapp~type = 'BP'

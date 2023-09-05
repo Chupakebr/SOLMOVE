@@ -147,57 +147,46 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     DATA ls_bus000 TYPE  bus000.
     DATA lv_person_id TYPE personid.
 
-    "check if bp exists
+    "check if bp exists by user
     CALL FUNCTION 'BP_CENTRALPERSON_GET'
       EXPORTING
-*       IV_PERSON_ID       =
-*       IV_BU_PARTNER_GUID =
-*       IV_EMPLOYEE_ID     =
         iv_username        = iv_bp_data-user
       IMPORTING
-*       ev_person_id       = ev_partner
-        ev_bu_partner_guid = lv_partner_guid
-*       EV_USERNAME        =
-*       ET_EMPLOYEE_ID     =
-*       EV_NAME            =
-*       ET_USERS           =
-*       ET_EMPLOYEE_ID_STAT2       =
-*     EXCEPTIONS
-*       NO_CENTRAL_PERSON  = 1
-*       NO_BUSINESS_PARTNER        = 2
-*       NO_ID              = 3
-*       OTHERS             = 4
-      .
+        ev_bu_partner_guid = lv_partner_guid.
     IF sy-subrc <> 0.
 * Implement suitable error handling here
     ENDIF.
     IF lv_partner_guid IS NOT INITIAL.
+      SELECT SINGLE partner FROM but000 WHERE partner_guid = @lv_partner_guid INTO @ev_partner.
       CONCATENATE  'BP:' ev_partner 'found for user' iv_bp_data-user INTO lv_message SEPARATED BY space.
       APPEND lv_message TO ev_message.
     ENDIF.
 
-    LOOP AT iv_bp_data-adsmtp_addr_ind INTO DATA(ls_mails).
+    IF ev_partner IS INITIAL.
+      "check if bp exists by mail.
+      LOOP AT iv_bp_data-adsmtp_addr_ind INTO DATA(ls_mails).
 
-      CALL FUNCTION 'BAPI_BUPA_SEARCH'
-        EXPORTING
-          email        = ls_mails-e_mail
-        TABLES
-          searchresult = lt_bp3
-          return       = lt_messages.
+        CALL FUNCTION 'BAPI_BUPA_SEARCH'
+          EXPORTING
+            email        = ls_mails-e_mail
+          TABLES
+            searchresult = lt_bp3
+            return       = lt_messages.
 
 
-      READ TABLE lt_bp3 INTO ls_bp3 INDEX 1.
-      ev_partner = ls_bp3-partner.
-      EXIT.
-    ENDLOOP.
+        READ TABLE lt_bp3 INTO ls_bp3 INDEX 1.
+        ev_partner = ls_bp3-partner.
+        EXIT.
+      ENDLOOP.
 
-    IF ev_partner IS NOT INITIAL.
-      CONCATENATE  'BP:' ev_partner 'found for mail' ls_mails-e_mail INTO lv_message SEPARATED BY space.
-      APPEND lv_message TO ev_message.
+      IF ev_partner IS NOT INITIAL.
+        CONCATENATE  'BP:' ev_partner 'found for mail' ls_mails-e_mail INTO lv_message SEPARATED BY space.
+        APPEND lv_message TO ev_message.
+      ENDIF.
     ENDIF.
 
-    IF ev_partner IS INITIAL.
-      "if not exists create
+    IF ev_partner IS INITIAL AND iv_bp_data-create = 'X'.
+      "if bp is not found create new one
       CLEAR ls_return_bp.
       CALL FUNCTION 'BUPA_CREATE_FROM_DATA'
         EXPORTING
@@ -229,7 +218,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
       IF ev_partner IS NOT INITIAL.
         LOOP AT ls_bpdata-bproles INTO lv_bp_role_bup001.
-          "add roles to BP
+          "add roles to BP (we need Emploee role to add user)
           CALL FUNCTION 'BAPI_BUPA_ROLE_ADD_2'
             EXPORTING
               businesspartner             = ev_partner
@@ -250,7 +239,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           ENDIF.
         ENDLOOP.
 
-        "create central person?
+        "create central person (need this to add user)
         ls_bus000-partner = ev_partner.
 
         CALL FUNCTION 'BP_BUPA_CREATECENTRALPERSON'
@@ -268,15 +257,12 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 *
         ENDIF.
 
-        "Step-4: set central persons name
+        "Step-4: finally set central persons name - user
         CALL FUNCTION 'BP_CENTRALPERSON_ASSIGN_USER'
           EXPORTING
             iv_person_id     = lv_person_id
             iv_user_id       = iv_bp_data-user
             iv_no_commit     = 'X' "done in next step
-*           IV_ASYNCHRON     = ' '
-*           IV_WITH_AUTHORITY = 'X'
-*           IV_BUFFER_MODE   = ' '
           EXCEPTIONS
             no_authorization = 1
             invalid_data     = 2
@@ -284,7 +270,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
             OTHERS           = 4.
 
         IF sy-subrc <> 0.
-          "
+          lv_message =  'Asingment of user failed'.
+          APPEND lv_message TO ev_message.
         ENDIF.
 
         CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
@@ -294,6 +281,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     ENDIF.
 
   ENDMETHOD.
+
 
   METHOD create_doc.
 
