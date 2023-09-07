@@ -7,7 +7,7 @@ The following content will be moved:
 + Transaction types (requires mapping)
 + Description
 + Priority
-+ Status (+ status change history CRM_JCDS)
++ Status (with status change history CRM_JCDS)
 + Attachments
 + Soldoc content
 + Cycles (requieres mapping)
