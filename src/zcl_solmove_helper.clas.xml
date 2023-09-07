@@ -61,6 +61,11 @@
      <DESCRIPT>Get configuration item</DESCRIPT>
     </SEOCOMPOTX>
     <SEOCOMPOTX>
+     <CMPNAME>GET_JCDS</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Get Document Cycle</DESCRIPT>
+    </SEOCOMPOTX>
+    <SEOCOMPOTX>
      <CMPNAME>GET_PARTNERS</CMPNAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Get custom WEBUI fields created with AET</DESCRIPT>
@@ -170,6 +175,18 @@
      <DESCRIPT>Coherent Categorization - Category for Single Language</DESCRIPT>
     </SEOSUBCOTX>
     <SEOSUBCOTX>
+     <CMPNAME>GET_JCDS</CMPNAME>
+     <SCONAME>EV_STATUS</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Document statuses</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>GET_JCDS</CMPNAME>
+     <SCONAME>IV_GUID</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Change Documents for System/User Statuses (Table JEST)</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
      <CMPNAME>GET_PARTNERS</CMPNAME>
      <SCONAME>LT_PARTNER</SCONAME>
      <LANGU>E</LANGU>
@@ -192,6 +209,12 @@
      <SCONAME>IV_GUID</SCONAME>
      <LANGU>E</LANGU>
      <DESCRIPT>GUID of a CRM Order Object</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>SET_STATUS</CMPNAME>
+     <SCONAME>IV_STATUS_HIST</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Document statuses</DESCRIPT>
     </SEOSUBCOTX>
     <SEOSUBCOTX>
      <CMPNAME>SET_TR</CMPNAME>

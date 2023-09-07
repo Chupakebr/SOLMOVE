@@ -60,6 +60,12 @@
      <DOMVALUE_L>ROOT</DOMVALUE_L>
      <DDTEXT>Root OCC ID</DDTEXT>
     </DD07V>
+    <DD07V>
+     <VALPOS>0009</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>GUID</DOMVALUE_L>
+     <DDTEXT>Original guID of the document</DDTEXT>
+    </DD07V>
    </DD07V_TAB>
   </asx:values>
  </asx:abap>

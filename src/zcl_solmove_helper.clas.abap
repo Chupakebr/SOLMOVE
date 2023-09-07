@@ -4,6 +4,7 @@ class ZCL_SOLMOVE_HELPER definition
   create public .
 
 public section.
+
   class-methods CREATE_BP
     importing
       !IV_BP_DATA type ZBP_DATA
@@ -83,6 +84,11 @@ public section.
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
       !EV_CYCLE type CRMT_OBJECT_ID_DB .
+  class-methods GET_JCDS
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+    exporting
+      !EV_STATUS type ZSTATUS_TT_HISTORY .
   class-methods SET_CYCLE
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -103,6 +109,7 @@ public section.
   class-methods SET_STATUS
     importing
       !IV_STATUS type ZSTATUS_TT
+      !IV_STATUS_HIST type ZSTATUS_TT_HISTORY
     changing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API .
   class-methods GET_TYPE
@@ -501,6 +508,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       CALL METHOD zcl_solmove_helper=>set_status
         EXPORTING
           iv_status = iv_documentprops-status
+          iv_status_hist = iv_documentprops-stat_hist_table
         CHANGING
           iv_1o_api = lo_cd.
     ENDIF.
@@ -755,12 +763,24 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     SELECT SINGLE sub_type, target FROM zsolmove_mapping WHERE type = 'ID'
       INTO (@lt_doc_properties-object_id-target_table, @lt_doc_properties-object_id-target_field).
 
+    "save document guid, just for history
+    lt_doc_properties-object_id-value = ls_orderadm_h-GUID.
+    SELECT SINGLE sub_type, target FROM zsolmove_mapping WHERE type = 'GUID'
+      INTO (@lt_doc_properties-object_id-target_table, @lt_doc_properties-object_id-target_field).
+
     "get all statuses of the document
     CALL METHOD zcl_solmove_helper=>get_status
       EXPORTING
         iv_guid   = iv_guid
       IMPORTING
         ev_status = lt_doc_properties-status.
+
+    "get hist statuses of the document
+    CALL METHOD zcl_solmove_helper=>get_jcds
+      EXPORTING
+        iv_guid   = iv_guid
+      IMPORTING
+        ev_status = lt_doc_properties-stat_hist_table.
 
     "get occ_ids
     lo_api_object->get_smud_occurrences(
@@ -845,6 +865,16 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
+  method GET_JCDS.
+    data lv_stat type line of zstatus_tt_history.
+
+    select single stat, chgnr, usnam, udate, utime from crm_jcds where objnr = @iv_guid
+      into (@lv_stat-stat, @lv_stat-chgnr, @lv_stat-usnam, @lv_stat-udate, @lv_stat-utime).  "system status
+
+    append lv_stat to ev_status.
+  endmethod.
+
+
   method GET_PARTNERS.
 
     data: lt_partner_wrkt     type crmt_partner_external_wrkt,
@@ -884,7 +914,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     data lv_stat type crm_j_status.
 
     select stat from crm_jest into (@lv_stat) "system status
-    where inact = '' and objnr = @iv_guid.
+      where inact = '' and objnr = @iv_guid.
       append lv_stat to ev_status.
     endselect.
 
@@ -1207,7 +1237,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lt_status_com  type crmt_status_comt,
       ls_status_com  type crmt_status_com,
       lt_status      type crmt_status_wrkt,
-      lt_stat_schema type crm_j_stsma.
+      lt_stat_schema type crm_j_stsma,
+      lv_stat_hist   type line of zstatus_tt_history.
 
     data: ls_status_int         type jstat.
     data: lt_status_int         type standard table of jstat.
@@ -1290,6 +1321,13 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 * Implement suitable error handling here
       endif.
     endif.
+
+    data: lv_table type table of crm_jcds.
+    loop at iv_status_hist into lv_stat_hist.
+      lv_stat_hist-objnr = ls_status-guid.
+      append lv_stat_hist to lv_table.
+      commit work.
+    endloop.
 
   endmethod.
 
