@@ -5,6 +5,27 @@ class ZCL_SOLMOVE_HELPER definition
 
 public section.
 
+  class-methods SET_DOCFLOW
+    importing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
+      !IV_DOC_GUID type ZCUSTOM_FIELDS
+      !LT_DOCS type CRMT_DOC_FLOW_WRKT
+      !IV_GUID type CRMT_OBJECT_GUID .
+  class-methods SET_CONTEXT
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+      !ET_CONTEXT type ZCONTEXT
+      !IV_DOC_GUID type ZCUSTOM_FIELDS .
+  class-methods GET_CONTEXT
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+    exporting
+      !ET_CONTEXT type ZCONTEXT .
+  class-methods GET_DOCFLOW
+    importing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
+    exporting
+      !LT_DOCS type CRMT_DOC_FLOW_WRKT .
   class-methods CREATE_BP
     importing
       !IV_BP_DATA type ZBP_DATA
@@ -13,8 +34,9 @@ public section.
       !EV_PARTNER type BU_PARTNER .
   class-methods FIND_DOC
     importing
-      !IV_DOC_ID type ZCUSTOM_FIELDS
-      !IV_TYPE type CRMT_PROCESS_TYPE
+      !IV_DOC_ID type ZCUSTOM_FIELDS optional
+      !IV_DOC_GUID type ZCUSTOM_FIELDS optional
+      !IV_TYPE type CRMT_PROCESS_TYPE optional
     exporting
       !EV_GUID type CRMT_OBJECT_GUID
     exceptions
@@ -342,58 +364,56 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lt_status_com TYPE crmt_status_comt,
           lv_message    TYPE tdline.
 
-    IF iv_documentprops-update IS NOT INITIAL.
-      "check if document already created?
-      CALL METHOD zcl_solmove_helper=>find_doc
-        EXPORTING
-          iv_doc_id     = iv_documentprops-object_id
-          iv_type       = iv_documentprops-type
-        IMPORTING
-          ev_guid       = DATA(lv_guig)
-        EXCEPTIONS
-          error_mapping = 1
-          OTHERS        = 2.
-      IF sy-subrc <> 0.
-        lv_message = 'Error: Could not find created doc (check mapping).'.
-        APPEND lv_message TO ev_message.
-      ENDIF.
-
-
-      IF lv_guig IS NOT INITIAL.
-        "document found, update it.
-        cl_ags_crm_1o_api=>get_instance(
-          EXPORTING
-          iv_header_guid                = lv_guig
-          iv_process_mode               = cl_ags_crm_1o_api=>ac_mode-change  " Processing Mode of Transaction
-        IMPORTING
-          eo_instance                   = lo_cd
-        EXCEPTIONS
-          invalid_parameter_combination = 1
-          error_occurred                = 2
-          OTHERS                        = 3 ).
-        IF sy-subrc <> 0.
-          lv_message = 'Error: Could not read created Document.'.
-        ELSE.
-          lv_message = 'Document found, updating.'.
-        ENDIF.
-        APPEND lv_message TO ev_message.
-      ENDIF.
-    ENDIF.
-
-    "Create document
-    IF lo_cd IS NOT BOUND AND iv_documentprops-update IS INITIAL.
-      cl_ags_crm_1o_api=>get_instance(
+    "check if document already created?
+    CALL METHOD zcl_solmove_helper=>find_doc
       EXPORTING
-        iv_process_mode = gc_mode-create " Processing Mode of Transaction
-        iv_process_type = iv_documentprops-type
+        iv_doc_id     = iv_documentprops-object_id
+        iv_type       = iv_documentprops-type
       IMPORTING
-        eo_instance = lo_cd
-        ).
-      IF sy-subrc <> 0.
-        lv_message = 'Error: Could not ceate new doc.'.
-        APPEND lv_message TO ev_message.
-      ENDIF.
+        ev_guid       = DATA(lv_guig)
+      EXCEPTIONS
+        error_mapping = 1
+        OTHERS        = 2.
+    IF sy-subrc <> 0.
+      lv_message = 'Error: Could not find created doc (check mapping).'.
+      APPEND lv_message TO ev_message.
     ENDIF.
+
+
+    IF lv_guig IS NOT INITIAL.
+      "document found, update it.
+      cl_ags_crm_1o_api=>get_instance(
+        EXPORTING
+        iv_header_guid                = lv_guig
+        iv_process_mode               = cl_ags_crm_1o_api=>ac_mode-change  " Processing Mode of Transaction
+      IMPORTING
+        eo_instance                   = lo_cd
+      EXCEPTIONS
+        invalid_parameter_combination = 1
+        error_occurred                = 2
+        OTHERS                        = 3 ).
+      IF sy-subrc <> 0.
+        lv_message = 'Error: Could not read created Document.'.
+      ELSE.
+        lv_message = 'Document found, updating.'.
+      ENDIF.
+      APPEND lv_message TO ev_message.
+    ENDIF.
+
+      "Create document
+      IF lo_cd IS NOT BOUND AND iv_documentprops-update IS INITIAL.
+        cl_ags_crm_1o_api=>get_instance(
+        EXPORTING
+          iv_process_mode = gc_mode-create " Processing Mode of Transaction
+          iv_process_type = iv_documentprops-type
+        IMPORTING
+          eo_instance = lo_cd
+          ).
+        IF sy-subrc <> 0.
+          lv_message = 'Error: Could not ceate new doc.'.
+          APPEND lv_message TO ev_message.
+        ENDIF.
+      ENDIF.
 
     IF lo_cd IS NOT BOUND.
       lv_message = 'Error: Could not initialize document. Process stoped.'.
@@ -500,17 +520,15 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lo_cd->set_partners( EXPORTING it_partner = iv_documentprops-partners ).
     ENDIF.
 
-
-
     "set status
     " !status set should be the last action to allow other changes for closed document!
     IF iv_documentprops-status IS NOT INITIAL.
       CALL METHOD zcl_solmove_helper=>set_status
         EXPORTING
-          iv_status = iv_documentprops-status
+          iv_status      = iv_documentprops-status
           iv_status_hist = iv_documentprops-stat_hist_table
         CHANGING
-          iv_1o_api = lo_cd.
+          iv_1o_api      = lo_cd.
     ENDIF.
     " !status set should be the last action to allow other changes for closed document!
 
@@ -545,22 +563,42 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           oref        TYPE REF TO cx_root,
           text        TYPE string.
 
-    fldname = iv_doc_id-target_field.
-    CONCATENATE fldname '=' iv_doc_id-value INTO cond_syntax SEPARATED BY space.
+    IF iv_doc_id IS NOT INITIAL.
+      fldname = iv_doc_id-target_field.
+      CONCATENATE fldname '=' iv_doc_id-value INTO cond_syntax SEPARATED BY space.
 
-    TRY.
-        IF iv_doc_id-target_table = 'CUSTOMER_H'.
-          SELECT SINGLE o~guid FROM crmd_customer_h AS c
-            LEFT JOIN crmd_orderadm_h AS o ON c~guid = o~guid AND o~process_type = @iv_type
-            WHERE (cond_syntax) INTO @ev_guid.
-        ENDIF.
-      CATCH cx_root INTO oref.
-        text = oref->get_text( ).
-    ENDTRY.
-    IF NOT text IS INITIAL.
-      MESSAGE text TYPE 'E'
-      RAISING error_mapping.
+      TRY.
+          IF iv_doc_id-target_table = 'CUSTOMER_H'.
+            SELECT SINGLE o~guid FROM crmd_customer_h AS c
+              LEFT JOIN crmd_orderadm_h AS o ON c~guid = o~guid AND o~process_type = @iv_type
+              WHERE (cond_syntax) INTO @ev_guid.
+          ENDIF.
+        CATCH cx_root INTO oref.
+          text = oref->get_text( ).
+      ENDTRY.
+      IF NOT text IS INITIAL.
+        MESSAGE text TYPE 'E'
+        RAISING error_mapping.
+      ENDIF.
     ENDIF.
+
+    IF iv_doc_guid IS NOT INITIAL AND ev_guid IS INITIAL.
+      fldname = iv_doc_guid-target_field.
+      CONCATENATE fldname '=' iv_doc_guid-value INTO cond_syntax SEPARATED BY space.
+      TRY.
+          IF iv_doc_guid-target_table = 'CUSTOMER_H'.
+            SELECT SINGLE c~guid FROM crmd_customer_h AS c
+              WHERE (cond_syntax) INTO @ev_guid.
+          ENDIF.
+        CATCH cx_root INTO oref.
+          text = oref->get_text( ).
+      ENDTRY.
+      IF NOT text IS INITIAL.
+        MESSAGE text TYPE 'E'
+        RAISING error_mapping.
+      ENDIF.
+    ENDIF.
+
   ENDMETHOD.
 
 
@@ -682,6 +720,21 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD get_context.
+
+    SELECT *
+       FROM tsocm_cr_context AS cont
+       LEFT JOIN aic_release_cycl AS cycl ON cont~project_id = cycl~smi_project
+    WHERE created_guid = @iv_guid AND release_crm_id IS NULL
+      INTO @DATA(lt_context).
+
+      APPEND lt_context TO et_context.
+
+    ENDSELECT.
+
+  ENDMETHOD.
+
+
   method get_cycle.
     data lv_source type zsolmove_source.
 
@@ -698,6 +751,26 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     ev_cycle = lv_target.
 
   endmethod.
+
+
+  METHOD get_docflow.
+
+    CALL METHOD iv_1o_api->get_doc_flow
+      IMPORTING
+        et_doc_flow          = LT_DOCS
+      EXCEPTIONS
+        document_not_found   = 1
+        error_occurred       = 2
+        document_locked      = 3
+        no_change_authority  = 4
+        no_display_authority = 5
+        no_change_allowed    = 6
+        OTHERS               = 7.
+    IF sy-subrc <> 0.
+*     Implement suitable error handling here
+    ENDIF.
+
+  ENDMETHOD.
 
 
   METHOD get_doc_data.
@@ -764,9 +837,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       INTO (@lt_doc_properties-object_id-target_table, @lt_doc_properties-object_id-target_field).
 
     "save document guid, just for history
-    lt_doc_properties-object_id-value = ls_orderadm_h-GUID.
+    lt_doc_properties-object_guid-value = ls_orderadm_h-guid.
     SELECT SINGLE sub_type, target FROM zsolmove_mapping WHERE type = 'GUID'
-      INTO (@lt_doc_properties-object_id-target_table, @lt_doc_properties-object_id-target_field).
+      INTO (@lt_doc_properties-object_guid-target_table, @lt_doc_properties-object_guid-target_field).
 
     "get all statuses of the document
     CALL METHOD zcl_solmove_helper=>get_status
@@ -851,6 +924,22 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         iv_guid   = iv_guid
       IMPORTING
         rt_result = lt_doc_properties-categories.
+
+    "get context
+    CALL METHOD zcl_solmove_helper=>get_context
+      EXPORTING
+        iv_guid    = iv_guid
+      IMPORTING
+        et_context = lt_doc_properties-context
+        .
+
+    "get docflow
+    CALL METHOD zcl_solmove_helper=>get_docflow
+      EXPORTING
+        iv_1o_api = lo_api_object
+      IMPORTING
+        lt_docs   = lt_doc_properties-doc_flow
+        .
 
   ENDMETHOD.
 
@@ -956,54 +1045,67 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
-  method get_webui_fields.
+  METHOD get_webui_fields.
 
-    data: ls_customer_h  type crmt_customer_h_wrk.
-    data: ls_orderadm_h  type crmt_orderadm_h_wrk.
-    data: ls_custom_line type zcustom_fields.
-    data: lv_source       type zsolmove_source.
-    data: lv_sub_type    type zsolmove_param.
-    data: fldname        type fieldname.
+    DATA: ls_customer_h  TYPE crmt_customer_h_wrk.
+    DATA: ls_orderadm_h  TYPE crmt_orderadm_h_wrk.
+    DATA: ls_custom_line TYPE zcustom_fields.
+    DATA: lv_source       TYPE zsolmove_source.
+    DATA: lv_sub_type    TYPE zsolmove_param.
+    DATA: fldname        TYPE fieldname.
 
-    field-symbols: <fld> type any.
+    FIELD-SYMBOLS: <fld> TYPE any.
 
     "get header data
-    iv_1o_api->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
+    iv_1o_api->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
 
     " get customer header
-    iv_1o_api->get_customer_h( importing es_customer_h = ls_customer_h ).
+    iv_1o_api->get_customer_h( IMPORTING es_customer_h = ls_customer_h ).
 
     "save customer_h fields that was mapped
-    select source, target from zsolmove_mapping where type = 'FILD' and sub_type = 'CUSTOMER_H'
-      into (@lv_source, @ls_custom_line-target_field).
+    SELECT source, target FROM zsolmove_mapping WHERE type = 'FILD' AND sub_type = 'CUSTOMER_H'
+      INTO (@lv_source, @ls_custom_line-target_field).
       ls_custom_line-target_table = 'CUSTOMER_H'.
-      concatenate 'ls_customer_h-' lv_source into fldname.
-      assign (fldname) to <fld>.
+      CONCATENATE 'ls_customer_h-' lv_source INTO fldname.
+      ASSIGN (fldname) TO <fld>.
       ls_custom_line-value = <fld>.
-      if ls_custom_line-value is not initial.
-        append ls_custom_line to ev_custom_fields.
-      endif.
-    endselect.
+      IF ls_custom_line-value IS NOT INITIAL.
+        APPEND ls_custom_line TO ev_custom_fields.
+      ENDIF.
+    ENDSELECT.
     "add other custom tables if requiered....
 
     "get additional data (old document id) to custom fields in target system
-    select sub_type, target from zsolmove_mapping where type = 'ID'
-      into (@lv_sub_type, @ls_custom_line-target_field).
+    SELECT sub_type, target FROM zsolmove_mapping WHERE type = 'ID'
+      INTO (@lv_sub_type, @ls_custom_line-target_field).
 
-      if lv_sub_type = 'CUSTOMER_H'.
+      IF lv_sub_type = 'CUSTOMER_H'.
         ls_custom_line-target_table = 'CUSTOMER_H'.
         ls_custom_line-value = ls_orderadm_h-object_id.
         "add other custom tables if requiered....
-      endif.
+      ENDIF.
 
-      if ls_custom_line-value is not initial.
-        append ls_custom_line to ev_custom_fields.
-      endif.
+      IF ls_custom_line-value IS NOT INITIAL.
+        APPEND ls_custom_line TO ev_custom_fields.
+      ENDIF.
+    ENDSELECT.
 
-    endselect.
+    "get additional data (old document guid) to custom fields in target system
+    SELECT sub_type, target FROM zsolmove_mapping WHERE type = 'GUID'
+      INTO (@lv_sub_type, @ls_custom_line-target_field).
+
+      IF lv_sub_type = 'CUSTOMER_H'.
+        ls_custom_line-target_table = 'CUSTOMER_H'.
+        ls_custom_line-value = ls_orderadm_h-guid.
+      ENDIF.
+
+      IF ls_custom_line-value IS NOT INITIAL.
+        APPEND ls_custom_line TO ev_custom_fields.
+      ENDIF.
+    ENDSELECT.
 
 
-  endmethod.
+  ENDMETHOD.
 
 
   method set_attachments.
@@ -1066,6 +1168,42 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
+  METHOD set_context.
+    DATA: ls_cr_context TYPE tsocm_cr_context,
+          lv_doc_guid   TYPE zcustom_fields,
+          lv_found_guid TYPE crmt_object_guid.
+
+
+    lv_doc_guid = iv_doc_guid.
+    LOOP AT et_context INTO ls_cr_context.
+
+      "fill in context of cr with retrofit cd data.
+      ls_cr_context-item_guid = iv_guid. "new document guig
+      "find mapping for target guid
+      CALL METHOD zcl_solmove_helper=>find_doc
+        EXPORTING
+          iv_doc_guid = lv_doc_guid
+        IMPORTING
+          ev_guid     = lv_found_guid
+        EXCEPTIONS
+         error_mapping = 1
+         others      = 2
+        .
+      IF sy-subrc <> 0.
+*       Implement suitable error handling here
+      ENDIF.
+
+
+      SET UPDATE TASK LOCAL.
+      MODIFY tsocm_cr_context FROM ls_cr_context.
+      IF sy-subrc = 0.
+        COMMIT WORK.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
   METHOD set_creation_info.
 
 *   update creating information
@@ -1117,6 +1255,56 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     cl_ai_crm_cm_cr_cont_run_btil=>update_cr_context( ls_cr_context_to ).
 
   endmethod.
+
+
+  METHOD set_docflow.
+    DATA: lv_doc        TYPE crmt_doc_flow_wrk,
+          lv_doc_fl     TYPE crmt_doc_flow_comt,
+          lv_doc_fl_e   TYPE crmt_doc_flow_extd,
+          lv_doc_l      TYPE crmt_doc_flow_com,
+          lv_log_handle TYPE balloghndl,
+          lv_doc_guid   TYPE zcustom_fields,
+          lv_found_guid TYPE crmt_object_guid.
+
+    lv_doc_guid = iv_doc_guid.
+
+    LOOP AT lt_docs INTO lv_doc.
+
+      "build link
+      MOVE-CORRESPONDING lv_doc TO lv_doc_fl_e.
+      lv_doc_guid-value = lv_doc_fl_e-objkey_b.
+
+      CALL METHOD zcl_solmove_helper=>find_doc
+        EXPORTING
+*         iv_doc_id   =
+          iv_doc_guid = lv_doc_guid
+*         iv_type     =
+        IMPORTING
+          ev_guid     = lv_found_guid
+*        EXCEPTIONS
+*         error_mapping = 1
+*         others      = 2
+        .
+      IF sy-subrc <> 0.
+*       Implement suitable error handling here
+      ENDIF.
+      lv_doc_fl_e-objkey_a = iv_guid.
+      lv_doc_fl_e-objkey_b = lv_found_guid. " guid of the doc
+      APPEND lv_doc_fl_e TO lv_doc_l-doc_link.
+      lv_doc_l-ref_guid = iv_guid.
+      lv_doc_l-ref_kind = 'A'.
+      APPEND lv_doc_l TO lv_doc_fl.
+
+      CALL METHOD iv_1o_api->set_doc_flow
+        CHANGING
+          ct_doc_flow   = lv_doc_fl
+          cv_log_handle = lv_log_handle.
+      IF sy-subrc <> 0.
+
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
 
 
   method set_ibase.
@@ -1420,7 +1608,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     loop at ev_custom_fields into ls_fields.
       if ls_fields-target_table = 'CUSTOMER_H'.
         concatenate 'ls_customer_h-' ls_fields-target_field into fldname.
-
         assign (fldname) to <fld>.
         <fld> = ls_fields-value.
         "ls_customer_h-ls_fields-target_field = ls_fields-value.
