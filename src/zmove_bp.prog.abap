@@ -26,7 +26,8 @@ DATA:
   lv_oref        TYPE REF TO cx_root,
   lv_mapp        TYPE zsolmove_mapping,
   lv_person_id   TYPE personid,
-  lv_total_lines TYPE i.
+  lv_total_lines TYPE i,
+  lv_int         TYPE i.
 
 
 SELECT-OPTIONS p_obj_id FOR but000-partner NO INTERVALS DEFAULT 1.

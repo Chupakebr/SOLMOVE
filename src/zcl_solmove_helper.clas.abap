@@ -995,39 +995,53 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
-  method GET_PARTNERS.
+  METHOD get_partners.
 
-    data: lt_partner_wrkt     type crmt_partner_external_wrkt,
-          ls_partner          type comt_partner_com.
+    DATA: lt_partner_wrkt   TYPE crmt_partner_external_wrkt,
+          ls_partner        TYPE comt_partner_com,
+          lv_zer            TYPE i,
+          lv_part_conv      TYPE crmt_partner_number,
+          target_partner_no TYPE zsolmove_target.
 
-    call method iv_1o_api->get_partners
-      importing
+    CALL METHOD iv_1o_api->get_partners
+      IMPORTING
         et_partner           = lt_partner_wrkt
-      exceptions
+      EXCEPTIONS
         document_not_found   = 1
         error_occurred       = 2
         document_locked      = 3
         no_change_authority  = 4
         no_display_authority = 5
         no_change_allowed    = 6
-        others               = 7.
+        OTHERS               = 7.
 
-    if lt_partner_wrkt is not initial.
-      loop at lt_partner_wrkt into data(ls_partner_wrk).
-        select single target from zsolmove_mapping where source eq @ls_partner_wrk-ref_partner_no into @data(target_partner_no).
-        if sy-subrc = 0.
+    IF lt_partner_wrkt IS NOT INITIAL.
+      LOOP AT lt_partner_wrkt INTO DATA(ls_partner_wrk).
+        SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @ls_partner_wrk-ref_partner_no INTO @target_partner_no.
+
+        IF target_partner_no IS INITIAL.
+          "try to convert bp to 10 digets with leading zeros
+          lv_part_conv = ls_partner_wrk-ref_partner_no.
+          lv_zer = strlen( ls_partner_wrk-ref_partner_no ).
+          DO 10 - lv_zer TIMES.
+            CONCATENATE '0' lv_part_conv INTO lv_part_conv.
+          ENDDO.
+          SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @lv_part_conv INTO @target_partner_no.
+        ENDIF.
+
+        IF target_partner_no IS NOT INITIAL.
           ls_partner-partner_fct    = ls_partner_wrk-ref_partner_fct.
           ls_partner-no_type        = ls_partner_wrk-ref_no_type.
           ls_partner-partner_no     = target_partner_no.
           ls_partner-display_type   = ls_partner_wrk-ref_display_type.
-        endif.
-        insert ls_partner into table lt_partner.
-        clear ls_partner.
-      endloop.
-    endif.
+          INSERT ls_partner INTO TABLE lt_partner.
+        ENDIF.
+        CLEAR ls_partner.
+      ENDLOOP.
+    ENDIF.
 
 
-  endmethod.
+  ENDMETHOD.
 
 
   method get_status.
