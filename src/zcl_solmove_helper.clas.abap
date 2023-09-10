@@ -532,11 +532,11 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
      "set texts
     IF iv_documentprops-text_all IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>set_texts
-        EXPORTING
-          iv_text_all      = iv_documentprops-text_all
-        CHANGING
-          iv_1o_api             = lo_cd.
+*      CALL METHOD zcl_solmove_helper=>set_texts
+*        EXPORTING
+*          iv_text_all      = iv_documentprops-text_all
+*        CHANGING
+*          iv_1o_api             = lo_cd.
       IF sy-subrc <> 0.
         lv_message = 'Error: Could not set document webui fields'.
         APPEND lv_message TO ev_message.
@@ -1599,6 +1599,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     loop at iv_text_all into data(text_single).
 
       DATA lines TYPE TABLE OF tline.
+
 
       CALL FUNCTION 'CONVERT_STREAM_TO_ITF_TEXT'
       EXPORTING
