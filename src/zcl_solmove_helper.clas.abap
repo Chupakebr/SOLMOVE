@@ -5,17 +5,6 @@ class ZCL_SOLMOVE_HELPER definition
 
 public section.
 
-  class-methods SET_DOCFLOW
-    importing
-      !IV_1O_API type ref to CL_AGS_CRM_1O_API
-      !IV_DOC_GUID type ZCUSTOM_FIELDS
-      !LT_DOCS type CRMT_DOC_FLOW_WRKT
-      !IV_GUID type CRMT_OBJECT_GUID .
-  class-methods SET_CONTEXT
-    importing
-      !IV_GUID type CRMT_OBJECT_GUID
-      !ET_CONTEXT type ZCONTEXT
-      !IV_DOC_GUID type ZCUSTOM_FIELDS .
   class-methods GET_CONTEXT
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -26,6 +15,27 @@ public section.
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
       !LT_DOCS type CRMT_DOC_FLOW_WRKT .
+  class-methods GET_TEXTS
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+    exporting
+      !LT_TEXT_ALL type COMT_TEXT_TEXTDATA_T .
+  class-methods SET_CONTEXT
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+      !ET_CONTEXT type ZCONTEXT
+      !IV_DOC_GUID type ZCUSTOM_FIELDS .
+  class-methods SET_DOCFLOW
+    importing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
+      !IV_DOC_GUID type ZCUSTOM_FIELDS
+      !LT_DOCS type CRMT_DOC_FLOW_WRKT
+      !IV_GUID type CRMT_OBJECT_GUID .
+  class-methods SET_TEXTS
+    importing
+      !IV_TEXT_ALL type COMT_TEXT_TEXTDATA_T
+    changing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API .
   class-methods CREATE_BP
     importing
       !IV_BP_DATA type ZBP_DATA
@@ -520,6 +530,19 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lo_cd->set_partners( EXPORTING it_partner = iv_documentprops-partners ).
     ENDIF.
 
+     "set texts
+    IF iv_documentprops-text_all IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_texts
+        EXPORTING
+          iv_text_all      = iv_documentprops-text_all
+        CHANGING
+          iv_1o_api             = lo_cd.
+      IF sy-subrc <> 0.
+        lv_message = 'Error: Could not set document webui fields'.
+        APPEND lv_message TO ev_message.
+      ENDIF.
+    ENDIF.
+
     "set status
     " !status set should be the last action to allow other changes for closed document!
     IF iv_documentprops-status IS NOT INITIAL.
@@ -855,6 +878,14 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       IMPORTING
         ev_status = lt_doc_properties-stat_hist_table.
 
+    "get texts
+     CALL METHOD zcl_solmove_helper=>get_texts
+      EXPORTING
+        iv_guid   = iv_guid
+      IMPORTING
+        lt_text_all = lt_doc_properties-text_all.
+
+
     "get occ_ids
     lo_api_object->get_smud_occurrences(
       IMPORTING
@@ -1006,6 +1037,33 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       where inact = '' and objnr = @iv_guid.
       append lv_stat to ev_status.
     endselect.
+
+  endmethod.
+
+
+  method GET_TEXTS.
+
+    DATA: lo_api_object       TYPE REF TO cl_ags_crm_1o_api.
+
+    CALL METHOD cl_ags_crm_1o_api=>get_instance
+      EXPORTING
+        iv_language                   = sy-langu
+        iv_header_guid                = iv_guid
+        iv_process_mode               = cl_ags_crm_1o_api=>ac_mode-display
+      IMPORTING
+        eo_instance                   = lo_api_object
+      EXCEPTIONS
+        invalid_parameter_combination = 1
+        error_occurred                = 2
+        OTHERS                        = 3.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+    lo_api_object->get_texts(
+      IMPORTING
+            et_text_all = lt_text_all ).
 
   endmethod.
 
@@ -1516,6 +1574,50 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       append lv_stat_hist to lv_table.
       commit work.
     endloop.
+
+  endmethod.
+
+
+  method SET_TEXTS.
+
+    DATA text TYPE crmt_text_comt.
+
+    loop at iv_text_all into data(text_single).
+
+      DATA lines TYPE TABLE OF tline.
+
+      CALL FUNCTION 'CONVERT_STREAM_TO_ITF_TEXT'
+      EXPORTING
+        stream_lines = text_single
+        lf           = abap_true
+      TABLES
+        itf_text     = lines.
+
+       DATA text_detail TYPE crmt_text_com.
+       text_detail-text_object = 'DOCUMENT'.
+       text_detail-lines = lines.
+       text_detail-mode = 'I'.
+       APPEND text_detail TO text.
+
+    endloop.
+
+
+    CALL METHOD iv_1o_api->set_texts
+      EXPORTING
+        it_text           = text
+      EXCEPTIONS
+        error_occurred    = 1
+        document_locked   = 2
+        no_change_allowed = 3
+        no_authority      = 4
+        OTHERS            = 5.
+    IF sy-subrc <> 0.
+
+      RAISE EXCEPTION TYPE /bsc/cx_sm_sb_exception
+        EXPORTING
+          textid = /bsc/cl_sm_scrumboard_utility=>convert_sy_msg_to_t100( sy ).
+
+    ENDIF.
 
   endmethod.
 
