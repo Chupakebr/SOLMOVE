@@ -410,20 +410,20 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       APPEND lv_message TO ev_message.
     ENDIF.
 
-      "Create document
-      IF lo_cd IS NOT BOUND AND iv_documentprops-update IS INITIAL.
-        cl_ags_crm_1o_api=>get_instance(
-        EXPORTING
-          iv_process_mode = gc_mode-create " Processing Mode of Transaction
-          iv_process_type = iv_documentprops-type
-        IMPORTING
-          eo_instance = lo_cd
-          ).
-        IF sy-subrc <> 0.
-          lv_message = 'Error: Could not ceate new doc.'.
-          APPEND lv_message TO ev_message.
-        ENDIF.
+    "Create document
+    IF lo_cd IS NOT BOUND AND iv_documentprops-update IS INITIAL.
+      cl_ags_crm_1o_api=>get_instance(
+      EXPORTING
+        iv_process_mode = gc_mode-create " Processing Mode of Transaction
+        iv_process_type = iv_documentprops-type
+      IMPORTING
+        eo_instance = lo_cd
+        ).
+      IF sy-subrc <> 0.
+        lv_message = 'Error: Could not ceate new doc.'.
+        APPEND lv_message TO ev_message.
       ENDIF.
+    ENDIF.
 
     IF lo_cd IS NOT BOUND.
       lv_message = 'Error: Could not initialize document. Process stoped.'.
@@ -530,7 +530,22 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lo_cd->set_partners( EXPORTING it_partner = iv_documentprops-partners ).
     ENDIF.
 
-     "set texts
+    "add doc context
+    CALL METHOD zcl_solmove_helper=>set_context
+      EXPORTING
+        iv_guid     = lo_cd->get_guid( )
+        et_context  = iv_documentprops-context
+        iv_doc_guid = iv_documentprops-object_guid.
+
+    "add document links
+    CALL METHOD zcl_solmove_helper=>set_docflow
+      EXPORTING
+        iv_1o_api   = lo_cd
+        iv_doc_guid = iv_documentprops-object_guid
+        lt_docs     = iv_documentprops-doc_flow
+        iv_guid     = lo_cd->get_guid( ).
+
+    "set texts
     IF iv_documentprops-text_all IS NOT INITIAL.
 *      CALL METHOD zcl_solmove_helper=>set_texts
 *        EXPORTING
@@ -1000,6 +1015,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     DATA: lt_partner_wrkt   TYPE crmt_partner_external_wrkt,
           ls_partner        TYPE comt_partner_com,
           lv_zer            TYPE i,
+          lv_part           TYPE i,
           lv_part_conv      TYPE crmt_partner_number,
           target_partner_no TYPE zsolmove_target.
 
@@ -1027,12 +1043,16 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
             CONCATENATE '0' lv_part_conv INTO lv_part_conv.
           ENDDO.
           SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @lv_part_conv INTO @target_partner_no.
+          lv_part = target_partner_no.
+          WRITE lv_part TO ls_partner-partner_no.
         ENDIF.
 
         IF target_partner_no IS NOT INITIAL.
           ls_partner-partner_fct    = ls_partner_wrk-ref_partner_fct.
           ls_partner-no_type        = ls_partner_wrk-ref_no_type.
-          ls_partner-partner_no     = target_partner_no.
+          IF ls_partner-partner_no IS INITIAL.
+            ls_partner-partner_no     = target_partner_no.
+          ENDIF.
           ls_partner-display_type   = ls_partner_wrk-ref_display_type.
           INSERT ls_partner INTO TABLE lt_partner.
         ENDIF.
