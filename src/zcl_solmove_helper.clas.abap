@@ -622,7 +622,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     IF iv_doc_guid IS NOT INITIAL AND ev_guid IS INITIAL.
       fldname = iv_doc_guid-target_field.
-      CONCATENATE fldname '=' iv_doc_guid-value INTO cond_syntax SEPARATED BY space.
+      CONCATENATE fldname '= ''' iv_doc_guid-value '''' INTO cond_syntax SEPARATED BY space.
       TRY.
           IF iv_doc_guid-target_table = 'CUSTOMER_H'.
             SELECT SINGLE c~guid FROM crmd_customer_h AS c
@@ -760,11 +760,14 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
   METHOD get_context.
 
-    SELECT *
-       FROM tsocm_cr_context AS cont
-       LEFT JOIN aic_release_cycl AS cycl ON cont~project_id = cycl~smi_project
-    WHERE created_guid = @iv_guid AND release_crm_id IS NULL
-      INTO @DATA(lt_context).
+    SELECT cont~*
+    FROM tsocm_cr_context AS cont
+    WHERE guid = @iv_guid
+    INTO @DATA(lt_context).
+
+      "change ibase
+
+      "change branch
 
       APPEND lt_context TO et_context.
 
@@ -1045,6 +1048,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @lv_part_conv INTO @target_partner_no.
           lv_part = target_partner_no.
           WRITE lv_part TO ls_partner-partner_no.
+          CONDENSE ls_partner-partner_no.
         ENDIF.
 
         IF target_partner_no IS NOT INITIAL.
@@ -1057,6 +1061,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           INSERT ls_partner INTO TABLE lt_partner.
         ENDIF.
         CLEAR ls_partner.
+        CLEAR target_partner_no.
       ENDLOOP.
     ENDIF.
 
