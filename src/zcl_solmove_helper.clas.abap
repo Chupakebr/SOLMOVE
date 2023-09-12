@@ -1680,11 +1680,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         no_authority      = 4
         OTHERS            = 5.
     IF sy-subrc <> 0.
-
-      RAISE EXCEPTION TYPE /bsc/cx_sm_sb_exception
-        EXPORTING
-          textid = /bsc/cl_sm_scrumboard_utility=>convert_sy_msg_to_t100( sy ).
-
+      "add error
     ENDIF.
 
   endmethod.
