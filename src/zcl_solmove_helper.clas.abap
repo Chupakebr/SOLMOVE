@@ -528,20 +528,20 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lo_cd->set_partners( EXPORTING it_partner = iv_documentprops-partners ).
     ENDIF.
 
-*    "add doc context
-*    CALL METHOD zcl_solmove_helper=>set_context
-*      EXPORTING
-*        iv_guid     = lo_cd->get_guid( )
-*        et_context  = iv_documentprops-context
-*        iv_doc_guid = iv_documentprops-object_guid.
-*
-*    "add document links
-*    CALL METHOD zcl_solmove_helper=>set_docflow
-*      EXPORTING
-*        iv_1o_api   = lo_cd
-*        iv_doc_guid = iv_documentprops-object_guid
-*        lt_docs     = iv_documentprops-doc_flow
-*        iv_guid     = lo_cd->get_guid( ).
+    "add doc context
+    CALL METHOD zcl_solmove_helper=>set_context
+      EXPORTING
+        iv_guid     = lo_cd->get_guid( )
+        et_context  = iv_documentprops-context
+        iv_doc_guid = iv_documentprops-object_guid.
+
+    "add document links
+    CALL METHOD zcl_solmove_helper=>set_docflow
+      EXPORTING
+        iv_1o_api   = lo_cd
+        iv_doc_guid = iv_documentprops-object_guid
+        lt_docs     = iv_documentprops-doc_flow
+        iv_guid     = lo_cd->get_guid( ).
 
     "set texts
     IF iv_documentprops-text_all IS NOT INITIAL.
@@ -1754,44 +1754,47 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
-  method set_webui_fields.
+  METHOD set_webui_fields.
 
     "Record Customer_h fields
-    data: ls_customer_h type crmt_customer_h_com.
-    data: ls_orderadm_h  type crmt_orderadm_h_wrk.
-    data: ls_customer_h_old type crmt_customer_h_wrk.
-    data: ls_fields type zcustom_fields.
-    data: fldname type fieldname.
+    DATA: ls_customer_h     TYPE crmt_customer_h_com,
+          ls_orderadm_h     TYPE crmt_orderadm_h_wrk,
+          ls_customer_h_old TYPE crmt_customer_h_wrk,
+          ls_fields         TYPE zcustom_fields,
+          lv_test           TYPE char32,
+          fldname           TYPE fieldname.
 
-    field-symbols:
-    <fld> type any.
 
-    iv_1o_api->get_customer_h( importing es_customer_h = ls_customer_h_old ).
-    iv_1o_api->get_orderadm_h( importing es_orderadm_h = ls_orderadm_h ).
+    FIELD-SYMBOLS:
+    <fld> TYPE any.
+
+    iv_1o_api->get_customer_h( IMPORTING es_customer_h = ls_customer_h_old ).
+    iv_1o_api->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
 
     ls_customer_h-ref_guid = ls_orderadm_h-guid.
 
-    loop at ev_custom_fields into ls_fields.
-      if ls_fields-target_table = 'CUSTOMER_H'.
-        concatenate 'ls_customer_h-' ls_fields-target_field into fldname.
-        assign (fldname) to <fld>.
+    LOOP AT ev_custom_fields INTO ls_fields.
+      IF ls_fields-target_table = 'CUSTOMER_H'.
+        CONCATENATE 'ls_customer_h-' ls_fields-target_field INTO fldname.
+        ASSIGN (fldname) TO <fld>.
+        CONDENSE ls_fields-value.
         <fld> = ls_fields-value.
         "ls_customer_h-ls_fields-target_field = ls_fields-value.
-      endif.
-    endloop.
+      ENDIF.
+    ENDLOOP.
 
-    iv_1o_api->set_customer_h( exporting is_customer_h = ls_customer_h
-      exceptions
+    iv_1o_api->set_customer_h( EXPORTING is_customer_h = ls_customer_h
+      EXCEPTIONS
         error_occurred    = 1
         document_locked   = 2
         no_change_allowed = 3
         no_authority      = 4
-        others            = 5 ).
-    if sy-subrc <> 0.
-      message id sy-msgid type sy-msgty number sy-msgno
-        with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
-        raising error_customer_header.
-    endif.
+        OTHERS            = 5 ).
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+        RAISING error_customer_header.
+    ENDIF.
 
-  endmethod.
+  ENDMETHOD.
 ENDCLASS.
