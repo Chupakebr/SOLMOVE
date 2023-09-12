@@ -23,6 +23,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_DUMMY</KEY>
+     <ENTRY>Map missing bp to Dummy one</ENTRY>
+     <LENGTH>35</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_OBJ_ID</KEY>
      <ENTRY>BP ID</ENTRY>
      <LENGTH>13</LENGTH>

@@ -136,8 +136,7 @@ public section.
       !EV_MESSAGE type TDLINE .
   class-methods SET_SOLDOC
     importing
-      !IV_1O_API type ref to CL_AGS_CRM_1O_API
-      !IV_SMUD_T type SMUD_T_GUID22 .
+      !IV_GUID type CRMT_OBJECT_GUID .
   class-methods SET_STATUS
     importing
       !IV_STATUS type ZSTATUS_TT
@@ -450,8 +449,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     IF iv_documentprops-occ_ids IS NOT INITIAL.
       CALL METHOD zcl_solmove_helper=>set_soldoc
         EXPORTING
-          iv_1o_api = lo_cd
-          iv_smud_t = iv_documentprops-occ_ids.
+          iv_guid = 'C1C936BF52CD1EDE949549481F83CC79'.
     ENDIF.
 
     " add attachments
@@ -530,20 +528,20 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lo_cd->set_partners( EXPORTING it_partner = iv_documentprops-partners ).
     ENDIF.
 
-    "add doc context
-    CALL METHOD zcl_solmove_helper=>set_context
-      EXPORTING
-        iv_guid     = lo_cd->get_guid( )
-        et_context  = iv_documentprops-context
-        iv_doc_guid = iv_documentprops-object_guid.
-
-    "add document links
-    CALL METHOD zcl_solmove_helper=>set_docflow
-      EXPORTING
-        iv_1o_api   = lo_cd
-        iv_doc_guid = iv_documentprops-object_guid
-        lt_docs     = iv_documentprops-doc_flow
-        iv_guid     = lo_cd->get_guid( ).
+*    "add doc context
+*    CALL METHOD zcl_solmove_helper=>set_context
+*      EXPORTING
+*        iv_guid     = lo_cd->get_guid( )
+*        et_context  = iv_documentprops-context
+*        iv_doc_guid = iv_documentprops-object_guid.
+*
+*    "add document links
+*    CALL METHOD zcl_solmove_helper=>set_docflow
+*      EXPORTING
+*        iv_1o_api   = lo_cd
+*        iv_doc_guid = iv_documentprops-object_guid
+*        lt_docs     = iv_documentprops-doc_flow
+*        iv_guid     = lo_cd->get_guid( ).
 
     "set texts
     IF iv_documentprops-text_all IS NOT INITIAL.
@@ -622,7 +620,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     IF iv_doc_guid IS NOT INITIAL AND ev_guid IS INITIAL.
       fldname = iv_doc_guid-target_field.
-      CONCATENATE fldname '= ''' iv_doc_guid-value '''' INTO cond_syntax SEPARATED BY space.
+      CONCATENATE fldname ' = ''' iv_doc_guid-value '''' INTO cond_syntax.
       TRY.
           IF iv_doc_guid-target_table = 'CUSTOMER_H'.
             SELECT SINGLE c~guid FROM crmd_customer_h AS c
@@ -1046,8 +1044,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
             CONCATENATE '0' lv_part_conv INTO lv_part_conv.
           ENDDO.
           SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @lv_part_conv INTO @target_partner_no.
-          lv_part = target_partner_no.
-          WRITE lv_part TO ls_partner-partner_no.
+          lv_part = target_partner_no. "remove leading zeros, if any
+          ls_partner-partner_no = lv_part.
           CONDENSE ls_partner-partner_no.
         ENDIF.
 
@@ -1486,7 +1484,28 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     data:
       lv_smud_occ type smud_context_occ,
+      lv_log_handle TYPE balloghndl,
       lv_root_occ type smud_guid22.
+
+    DATA: lo_api_object       TYPE REF TO cl_ags_crm_1o_api,
+          iv_smud_t           TYPE SMUD_T_GUID22.
+
+
+    CALL METHOD cl_ags_crm_1o_api=>get_instance
+      EXPORTING
+        iv_language                   = sy-langu
+        iv_header_guid                = iv_guid
+        iv_process_mode               = cl_ags_crm_1o_api=>ac_mode-display
+      IMPORTING
+        eo_instance                   = lo_api_object
+      EXCEPTIONS
+        invalid_parameter_combination = 1
+        error_occurred                = 2
+        OTHERS                        = 3.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
 
     "set smud context
     loop at iv_smud_t into data(ls_occ_id).
@@ -1495,22 +1514,31 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       " get root occ
       select single root_occ from smud_node where occ_id = @ls_occ_id into @lv_root_occ.
 
-      iv_1o_api->set_smud_context_occ(
+      lo_api_object->set_smud_context_occ(
               exporting
                 iv_smud_context_occ = conv #( lv_smud_occ && lv_root_occ )
                 iv_sbom_type        = cl_ags_crm_smud_util=>cs_sbom_type-cd
+                iv_scope_id         = '1111111111111111111111'
               exceptions
                 invalid_parameters  = 1
                 others              = 2 ).
 
-      iv_1o_api->save_smud_occurrences(
+      lo_api_object->save_smud_occurrences(
       exceptions
         error_occurred = 1
         others         = 2 ).
+      lo_api_object->save( CHANGING cv_log_handle = lv_log_handle ).
 
       if sy-subrc <> 0.
       endif.
+
+      COMMIT WORK.
     endloop.
+
+        "get occ_ids debug
+    lo_api_object->get_smud_occurrences(
+      IMPORTING
+        et_smud_occurrences = data(lt_smud_occurrences) ).
 
   endmethod.
 
