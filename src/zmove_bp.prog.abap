@@ -33,7 +33,7 @@ DATA:
 SELECT-OPTIONS p_obj_id FOR but000-partner NO INTERVALS DEFAULT 1.
 PARAMETERS p_rfc    TYPE rfcdwf DEFAULT 'NONE'.
 PARAMETERS p_create AS CHECKBOX DEFAULT ''.
-SELECT-OPTIONS p_dummy FOR but000-partner NO INTERVALS.
+SELECT-OPTIONS p_dummy FOR but000-partner NO INTERVALS NO-EXTENSION..
 PARAMETERS p_test   AS CHECKBOX DEFAULT 'X'.
 
 START-OF-SELECTION.
@@ -147,9 +147,9 @@ START-OF-SELECTION.
       ELSEIF p_dummy IS NOT INITIAL.
         lv_mapp-type = 'BP'.
         lv_mapp-source = lv_part_c.
-        lv_mapp-target = p_dummy.
+        lv_mapp-target = p_dummy-low.
         MODIFY zsolmove_mapping FROM lv_mapp.
-        CONCATENATE p_dummy 'mapping for dummy bp added' INTO ls_output-message SEPARATED BY space.
+        CONCATENATE p_dummy-low 'mapping for dummy bp added' INTO ls_output-message SEPARATED BY space.
         APPEND ls_output TO lt_output.
       ENDIF.
     ELSE.
