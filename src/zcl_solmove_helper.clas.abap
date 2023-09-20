@@ -1518,21 +1518,15 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
               exporting
                 iv_smud_context_occ = conv #( lv_smud_occ && lv_root_occ )
                 iv_sbom_type        = cl_ags_crm_smud_util=>cs_sbom_type-cd
-                iv_scope_id         = '1111111111111111111111'
               exceptions
                 invalid_parameters  = 1
                 others              = 2 ).
 
-      lo_api_object->save_smud_occurrences(
-      exceptions
-        error_occurred = 1
-        others         = 2 ).
       lo_api_object->save( CHANGING cv_log_handle = lv_log_handle ).
 
       if sy-subrc <> 0.
       endif.
 
-      COMMIT WORK.
     endloop.
 
         "get occ_ids debug
