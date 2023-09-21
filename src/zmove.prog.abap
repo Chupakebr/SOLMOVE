@@ -43,6 +43,8 @@ PARAMETERS p_rfc    TYPE rfcdwf DEFAULT 'NONE'.
 PARAMETERS p_ttype  TYPE crmt_process_type_db DEFAULT 'S1MJ'.
 PARAMETERS p_update AS CHECKBOX DEFAULT 'X'.
 PARAMETERS p_status AS CHECKBOX DEFAULT ''. "! if document in closed status no updates are posible.
+PARAMETERS p_texts  AS CHECKBOX DEFAULT ''.
+PARAMETERS p_attach AS CHECKBOX DEFAULT ''.
 PARAMETERS p_test   AS CHECKBOX DEFAULT 'X'.
 
 START-OF-SELECTION.
@@ -133,6 +135,13 @@ START-OF-SELECTION.
         IF p_status IS INITIAL.
           CLEAR ls_doc_properties-status.
           CLEAR ls_doc_properties-stat_hist.
+        ENDIF.
+        IF p_texts IS INITIAL.
+          CLEAR ls_doc_properties-text_all.
+          CLEAR ls_doc_properties-text_gen.
+        ENDIF.
+        IF p_attach IS INITIAL.
+          CLEAR ls_doc_properties-attach_list.
         ENDIF.
 
         IF p_test IS INITIAL.

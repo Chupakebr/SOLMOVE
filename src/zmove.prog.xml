@@ -65,6 +65,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_ATTACH</KEY>
+     <ENTRY>Attachments move</ENTRY>
+     <LENGTH>24</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_OBJ_ID</KEY>
      <ENTRY>Transaction ID</ENTRY>
      <LENGTH>22</LENGTH>
@@ -89,6 +95,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_TEXTS</KEY>
+     <ENTRY>Texts move</ENTRY>
+     <LENGTH>18</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_TTYPE</KEY>
      <ENTRY>Document Type</ENTRY>
      <LENGTH>21</LENGTH>
@@ -96,8 +108,8 @@
     <item>
      <ID>S</ID>
      <KEY>P_UPDATE</KEY>
-     <ENTRY>Update created document?</ENTRY>
-     <LENGTH>33</LENGTH>
+     <ENTRY>Only update (no new documants)</ENTRY>
+     <LENGTH>38</LENGTH>
     </item>
    </TPOOL>
   </asx:values>
