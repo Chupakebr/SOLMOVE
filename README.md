@@ -16,14 +16,14 @@ The following content will be moved:
 + Creation Information (Posting & Created Dates - Created by User)
 + Transport (no changes in the managed system, just table entrys)
 + Business Partners (requires mapping)
++ Reach Texts
 
-! SLA
+- SLA
 - Approval procedure
 - Links to other documents (CRM)
 - Scope
 
 ! Multi-level category (requires mapping)
-- Reach Texts
 ```
 
 # Instalation
