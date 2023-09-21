@@ -1281,6 +1281,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   METHOD set_context.
 
     DATA: ls_cr_context         TYPE tsocm_cr_context,
+          lt_cr_context         TYPE TABLE OF tsocm_cr_context,
           lv_doc_guid           TYPE zcustom_fields,
           lv_found_guid         TYPE crmt_object_guid,
           lv_search_comp_detail TYPE ibap_comp1,
@@ -1350,17 +1351,19 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           ENDIF.
           ls_cr_context-ibase = lv_found_comp_detail-ibase.
           ls_cr_context-ibase_instance = lv_found_comp_detail-instance.
-        endif.
-
-          SET UPDATE TASK LOCAL.
-          MODIFY tsocm_cr_context FROM ls_cr_context.
-          IF sy-subrc = 0.
-            COMMIT WORK.
-          ENDIF.
         ENDIF.
-      ENDLOOP.
+        APPEND ls_cr_context TO lt_cr_context.
+      ENDIF.
+    ENDLOOP.
+    IF lt_cr_context IS NOT INITIAL.
+      SET UPDATE TASK LOCAL.
+      MODIFY tsocm_cr_context FROM TABLE lt_cr_context.
+      IF sy-subrc = 0.
+        COMMIT WORK.
+      ENDIF.
+    ENDIF.
 
-    ENDMETHOD.
+  ENDMETHOD.
 
 
   METHOD set_creation_info.
