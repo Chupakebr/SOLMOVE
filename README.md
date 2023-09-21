@@ -23,7 +23,6 @@ The following content will be moved:
 - SLA
 - Approval procedure
 
-
 ! Multi-level category (requires mapping)
 ```
 
