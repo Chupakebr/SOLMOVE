@@ -774,6 +774,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     SELECT cont~*
     FROM tsocm_cr_context AS cont
     WHERE guid = @iv_guid
+      AND created_guid <> @iv_guid "cycles link CR
+      AND item_guid <> @iv_guid "cycles link REQ
     INTO @DATA(lt_context).
 
       "change ibase
@@ -783,9 +785,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
             iv_ibase = lt_context-product_id
           IMPORTING
             ev_ibase = DATA(lv_new_ibase).
-        if lv_new_ibase is not initial.
-        lt_context-product_id = lv_new_ibase.
-        endif.
+        IF lv_new_ibase IS NOT INITIAL.
+          lt_context-product_id = lv_new_ibase.
+        ENDIF.
       ENDIF.
 
       "change transaction type
