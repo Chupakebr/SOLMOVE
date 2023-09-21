@@ -17,11 +17,12 @@ The following content will be moved:
 + Transport (no changes in the managed system, just table entrys)
 + Business Partners (requires mapping)
 + Reach Texts
++ Links to other documents (CRM)
++ Scope
 
 - SLA
 - Approval procedure
-- Links to other documents (CRM)
-- Scope
+
 
 ! Multi-level category (requires mapping)
 ```
