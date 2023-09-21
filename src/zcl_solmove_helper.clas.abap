@@ -24,7 +24,8 @@ public section.
     importing
       !IV_GUID type CRMT_OBJECT_GUID
       !ET_CONTEXT type ZCONTEXT
-      !IV_DOC_GUID type ZCUSTOM_FIELDS .
+      !IV_DOC_GUID type ZCUSTOM_FIELDS
+      !IV_CYCLE type CRMT_OBJECT_ID_DB .
   class-methods SET_DOCFLOW
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
@@ -483,6 +484,14 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           iv_ibase = iv_documentprops-ibase
           iv_cycle = iv_documentprops-cycle.
 
+      "add doc context
+      CALL METHOD zcl_solmove_helper=>set_context
+        EXPORTING
+          iv_guid     = lo_cd->get_guid( )
+          et_context  = iv_documentprops-context
+          iv_doc_guid = iv_documentprops-object_guid
+          iv_cycle    = iv_documentprops-cycle.
+
       "set transports
       IF iv_documentprops-transports IS NOT INITIAL.
         CALL METHOD zcl_solmove_helper=>set_tr
@@ -527,13 +536,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     IF iv_documentprops-partners IS NOT INITIAL.
       lo_cd->set_partners( EXPORTING it_partner = iv_documentprops-partners ).
     ENDIF.
-
-    "add doc context
-    CALL METHOD zcl_solmove_helper=>set_context
-      EXPORTING
-        iv_guid     = lo_cd->get_guid( )
-        et_context  = iv_documentprops-context
-        iv_doc_guid = iv_documentprops-object_guid.
 
     "add document links
     CALL METHOD zcl_solmove_helper=>set_docflow
@@ -764,8 +766,21 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     INTO @DATA(lt_context).
 
       "change ibase
+      IF lt_context-product_id IS NOT INITIAL.
+        CALL METHOD zcl_solmove_helper=>get_ibase
+          EXPORTING
+            iv_ibase = lt_context-product_id
+          IMPORTING
+            ev_ibase = DATA(lv_new_ibase).
+        lt_context-product_id = lv_new_ibase.
+      ENDIF.
 
-      "change branch
+      "change transaction type
+      CALL METHOD zcl_solmove_helper=>get_type
+        EXPORTING
+          iv_type = lt_context-process_type
+        IMPORTING
+          ev_type = lt_context-process_type.
 
       APPEND lt_context TO et_context.
 
@@ -1264,39 +1279,88 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   METHOD set_context.
-    DATA: ls_cr_context TYPE tsocm_cr_context,
-          lv_doc_guid   TYPE zcustom_fields,
-          lv_found_guid TYPE crmt_object_guid.
 
+    DATA: ls_cr_context         TYPE tsocm_cr_context,
+          lv_doc_guid           TYPE zcustom_fields,
+          lv_found_guid         TYPE crmt_object_guid,
+          lv_search_comp_detail TYPE ibap_comp1,
+          lv_found_comp_detail  TYPE ibap_dat1.
 
     lv_doc_guid = iv_doc_guid.
-    LOOP AT et_context INTO ls_cr_context.
 
-      "fill in context of cr with retrofit cd data.
+    "Get values for cycle
+    SELECT SINGLE * FROM aic_release_cycl INTO @DATA(lv_rel)
+    WHERE release_crm_id = @iv_cycle.
+
+    SELECT SINGLE * FROM tsocm_cr_context INTO @DATA(lv_cyc_context)
+    WHERE guid = @lv_rel-release_crm_guid.
+
+    LOOP AT et_context INTO ls_cr_context.
+      CLEAR lv_found_guid.
+
+      "fill in context of cr with cd data.
       ls_cr_context-item_guid = iv_guid. "new document guig
+      lv_doc_guid-value = ls_cr_context-created_guid.
+
       "find mapping for target guid
       CALL METHOD zcl_solmove_helper=>find_doc
         EXPORTING
-          iv_doc_guid = lv_doc_guid
+          iv_doc_guid   = lv_doc_guid
         IMPORTING
-          ev_guid     = lv_found_guid
+          ev_guid       = lv_found_guid
         EXCEPTIONS
-         error_mapping = 1
-         others      = 2
-        .
+          error_mapping = 1
+          OTHERS        = 2.
       IF sy-subrc <> 0.
-*       Implement suitable error handling here
+*       Implement suitable error handling here.
       ENDIF.
 
+      IF lv_found_guid IS NOT INITIAL.
+        ls_cr_context-created_guid = lv_found_guid.
 
-      SET UPDATE TASK LOCAL.
-      MODIFY tsocm_cr_context FROM ls_cr_context.
-      IF sy-subrc = 0.
-        COMMIT WORK.
-      ENDIF.
-    ENDLOOP.
+        IF ls_cr_context-slan_id IS NOT INITIAL.
+          "set solution id and branch id from the mapped cycle.
+          ls_cr_context-slan_id = lv_cyc_context-slan_id.
+          ls_cr_context-sbra_id = lv_cyc_context-sbra_id.
+        ENDIF.
 
-  ENDMETHOD.
+        IF ls_cr_context-project_id IS NOT INITIAL.
+          "set new cycle information
+          ls_cr_context-project_id  = lv_rel-smi_project.
+          ls_cr_context-solution_id = iv_cycle.
+        ENDIF.
+        " set correct iBase info
+        IF ls_cr_context-product_id IS NOT INITIAL.
+          SELECT SINGLE product_guid INTO @DATA(lv_p_guid16)
+            FROM comm_product
+            WHERE product_id = @ls_cr_context-product_id.
+          lv_search_comp_detail-object_guid = lv_p_guid16.
+
+          CALL FUNCTION 'CRM_IBASE_COMP_FIND'
+            EXPORTING
+              i_comp_det        = lv_search_comp_detail
+            IMPORTING
+              e_comp            = lv_found_comp_detail
+            EXCEPTIONS
+              not_found         = 1
+              several_instances = 2
+              OTHERS            = 3.
+          IF sy-subrc <> 0.
+            CONTINUE.  "with next entry
+          ENDIF.
+          ls_cr_context-ibase = lv_found_comp_detail-ibase.
+          ls_cr_context-ibase_instance = lv_found_comp_detail-instance.
+        endif.
+
+          SET UPDATE TASK LOCAL.
+          MODIFY tsocm_cr_context FROM ls_cr_context.
+          IF sy-subrc = 0.
+            COMMIT WORK.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+
+    ENDMETHOD.
 
 
   METHOD set_creation_info.
@@ -1364,6 +1428,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     lv_doc_guid = iv_doc_guid.
 
     LOOP AT lt_docs INTO lv_doc.
+      CLEAR  lv_found_guid.
 
       "build link
       MOVE-CORRESPONDING lv_doc TO lv_doc_fl_e.
@@ -1383,9 +1448,14 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       IF sy-subrc <> 0.
 *       Implement suitable error handling here
       ENDIF.
-      lv_doc_fl_e-objkey_a = iv_guid.
-      lv_doc_fl_e-objkey_b = lv_found_guid. " guid of the doc
-      APPEND lv_doc_fl_e TO lv_doc_l-doc_link.
+      IF  lv_found_guid IS NOT INITIAL.
+        lv_doc_fl_e-objkey_a = iv_guid.
+        lv_doc_fl_e-objkey_b = lv_found_guid. " guid of the doc
+        APPEND lv_doc_fl_e TO lv_doc_l-doc_link.
+      ENDIF.
+    ENDLOOP.
+
+    IF lv_doc_l-doc_link IS NOT INITIAL.
       lv_doc_l-ref_guid = iv_guid.
       lv_doc_l-ref_kind = 'A'.
       APPEND lv_doc_l TO lv_doc_fl.
@@ -1397,7 +1467,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       IF sy-subrc <> 0.
 
       ENDIF.
-    ENDLOOP.
+    ENDIF.
+
 
   ENDMETHOD.
 
