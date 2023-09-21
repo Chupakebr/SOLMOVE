@@ -235,6 +235,12 @@
      <DESCRIPT>Transfer Table for Partners to Partner Processing</DESCRIPT>
     </SEOSUBCOTX>
     <SEOSUBCOTX>
+     <CMPNAME>GET_DOC_DATA</CMPNAME>
+     <SCONAME>EV_MESSAGE</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Processing log for document</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
      <CMPNAME>GET_JCDS</CMPNAME>
      <SCONAME>EV_STATUS</SCONAME>
      <LANGU>E</LANGU>

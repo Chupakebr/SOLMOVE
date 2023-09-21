@@ -57,10 +57,13 @@ public section.
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
       !LT_DOC_PROPERTIES type ZDOC_PROPS_STRUCT
+      !EV_MESSAGE type ZPROCESS_LOG_TT
     exceptions
       ERROR_READ_DOC
       ERROR_GET_ATTACHMENTS
-      ERROR_NO_TARGET_TTYPE .
+      ERROR_NO_TARGET_TTYPE
+      ERROR_CYCLE_NOT_MAPPED
+      ERROR_IBASE_NOT_MAPPED .
   class-methods CREATE_DOC
     importing
       !IV_DOCUMENTPROPS type ZDOC_PROPS_STRUCT
@@ -88,7 +91,9 @@ public section.
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
-      !LT_PARTNER type COMT_PARTNER_COMT .
+      !LT_PARTNER type COMT_PARTNER_COMT
+    exceptions
+      ERROR_NOT_MAPPED .
   class-methods GET_WEBUI_FIELDS
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
@@ -111,12 +116,16 @@ public section.
     importing
       !IV_IBASE type COMT_PRODUCT_ID
     exporting
-      !EV_IBASE type COMT_PRODUCT_ID .
+      !EV_IBASE type COMT_PRODUCT_ID
+    exceptions
+      ERROR_NOT_MAPPED .
   class-methods GET_CYCLE
     importing
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
-      !EV_CYCLE type CRMT_OBJECT_ID_DB .
+      !EV_CYCLE type CRMT_OBJECT_ID_DB
+    exceptions
+      ERROR_NOT_MAPPED .
   class-methods GET_JCDS
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -148,7 +157,9 @@ public section.
     importing
       !IV_TYPE type CRMT_PROCESS_TYPE
     exporting
-      !EV_TYPE type CRMT_PROCESS_TYPE .
+      !EV_TYPE type CRMT_PROCESS_TYPE
+    exceptions
+      ERROR_NOT_MAPPED .
   class-methods GET_ATTACHMENTS
     importing
       !IV_ATTACHMENT_LIST type AGS_T_CRM_ATTACHMENT
@@ -772,7 +783,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
             iv_ibase = lt_context-product_id
           IMPORTING
             ev_ibase = DATA(lv_new_ibase).
+        if lv_new_ibase is not initial.
         lt_context-product_id = lv_new_ibase.
+        endif.
       ENDIF.
 
       "change transaction type
@@ -789,22 +802,28 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
-  method get_cycle.
-    data lv_source type zsolmove_source.
+  METHOD get_cycle.
+    DATA lv_source TYPE zsolmove_source.
 
-    select single release_crm_id into @ev_cycle
-      from tsocm_cr_context as cont
-      left join aic_release_cycl as cycl on cont~project_id = cycl~smi_project
-    where created_guid = @iv_guid and release_crm_id is not null.
+    SELECT SINGLE release_crm_id INTO @ev_cycle
+      FROM tsocm_cr_context AS cont
+      LEFT JOIN aic_release_cycl AS cycl ON cont~project_id = cycl~smi_project
+    WHERE ( created_guid = @iv_guid AND release_crm_id IS NOT NULL ) " CR.
+      OR ( item_guid = @iv_guid AND release_crm_id IS NOT NULL ). " Requierements.
 
     lv_source = ev_cycle.
+    IF lv_source IS NOT INITIAL.
+      SELECT SINGLE target INTO @DATA(lv_target) FROM zsolmove_mapping
+        WHERE source = @lv_source AND type = 'CYCLE'.
 
-    select single target into @data(lv_target) from zsolmove_mapping
-      where source = @lv_source and type = 'CYCLE'.
+      IF lv_target IS NOT INITIAL.
+        ev_cycle = lv_target.
+      ELSE.
+        MESSAGE 'Cycle not mapped' TYPE 'E' RAISING error_not_mapped.
+      ENDIF.
+    ENDIF.
 
-    ev_cycle = lv_target.
-
-  endmethod.
+  ENDMETHOD.
 
 
   METHOD get_docflow.
@@ -838,7 +857,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lt_smud_occurrences TYPE cl_ags_crm_1o_api=>tt_smud_occurrence,
           lt_attachment_list  TYPE ags_t_crm_attachment,
           lt_partner_wrkt     TYPE crmt_partner_external_wrkt,
-          lt_partner          TYPE comt_partner_comt.
+          lt_partner          TYPE comt_partner_comt,
+          lv_message          TYPE tdline.
 
     "Get document instance
     CALL METHOD cl_ags_crm_1o_api=>get_instance
@@ -910,9 +930,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         ev_status = lt_doc_properties-stat_hist_table.
 
     "get texts
-     CALL METHOD zcl_solmove_helper=>get_texts
+    CALL METHOD zcl_solmove_helper=>get_texts
       EXPORTING
-        iv_guid   = iv_guid
+        iv_guid     = iv_guid
       IMPORTING
         lt_text_all = lt_doc_properties-text_all.
 
@@ -948,6 +968,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           iv_ibase = lv_refobj-product_id
         IMPORTING
           ev_ibase = lt_doc_properties-ibase.
+      IF sy-subrc <> 0.
+        CONCATENATE 'Error mapping iBase:' lv_refobj-product_id INTO lv_message SEPARATED BY space.
+        APPEND lv_message TO ev_message.
+      ENDIF.
     ENDIF.
 
     " get change cycle
@@ -956,6 +980,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         iv_guid  = iv_guid
       IMPORTING
         ev_cycle = lt_doc_properties-cycle.
+    IF sy-subrc <> 0.
+        CONCATENATE 'Error mapping Cycle!' '' INTO lv_message SEPARATED BY space.
+        APPEND lv_message TO ev_message.
+    ENDIF.
 
     "get transports
     IF lt_doc_properties-cycle IS NOT INITIAL.
@@ -992,28 +1020,30 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       EXPORTING
         iv_guid    = iv_guid
       IMPORTING
-        et_context = lt_doc_properties-context
-        .
+        et_context = lt_doc_properties-context.
 
     "get docflow
     CALL METHOD zcl_solmove_helper=>get_docflow
       EXPORTING
         iv_1o_api = lo_api_object
       IMPORTING
-        lt_docs   = lt_doc_properties-doc_flow
-        .
+        lt_docs   = lt_doc_properties-doc_flow.
 
   ENDMETHOD.
 
 
-  method get_ibase.
-    data lv_source_ibase type zsolmove_source.
+  METHOD get_ibase.
+    DATA lv_source_ibase TYPE zsolmove_source.
     lv_source_ibase = iv_ibase.
-    select single target into @data(lv_ibase) from zsolmove_mapping
-      where source = @lv_source_ibase
-      and type = 'IBASE'.
-    ev_ibase = lv_ibase.
-  endmethod.
+    SELECT SINGLE target INTO @DATA(lv_ibase) FROM zsolmove_mapping
+      WHERE source = @lv_source_ibase
+      AND type = 'IBASE'.
+    IF lv_ibase IS NOT INITIAL.
+      ev_ibase = lv_ibase.
+    ELSE.
+      MESSAGE 'iBase not mapped' type 'E' RAISING error_not_mapped.
+    ENDIF.
+  ENDMETHOD.
 
 
   method GET_JCDS.
@@ -1145,14 +1175,19 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
-  method get_type.
-    data lv_source_type type zsolmove_source.
+  METHOD get_type.
+    DATA lv_source_type TYPE zsolmove_source.
     lv_source_type = iv_type.
-    select single target into @data(lv_type) from zsolmove_mapping
-      where source = @lv_source_type
-      and TYPE = 'TYPE'.
-    ev_type = lv_type.
-  endmethod.
+    SELECT SINGLE target INTO @DATA(lv_type) FROM zsolmove_mapping
+      WHERE source = @lv_source_type
+      AND type = 'TYPE'.
+    IF lv_type IS NOT INITIAL.
+      ev_type = lv_type.
+    ELSE.
+      MESSAGE 'Doc. type not mapped' TYPE 'E' RAISING error_not_mapped.
+    ENDIF.
+
+  ENDMETHOD.
 
 
   METHOD get_webui_fields.
@@ -1299,11 +1334,11 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     LOOP AT et_context INTO ls_cr_context.
       CLEAR lv_found_guid.
 
-      "fill in context of cr with cd data.
-      ls_cr_context-item_guid = iv_guid. "new document guig
-      lv_doc_guid-value = ls_cr_context-created_guid.
+      "fill in context with new entetys data.
+      ls_cr_context-guid = iv_guid. "new document guig
 
       "find mapping for target guid
+      lv_doc_guid-value = ls_cr_context-created_guid.
       CALL METHOD zcl_solmove_helper=>find_doc
         EXPORTING
           iv_doc_guid   = lv_doc_guid
@@ -1352,8 +1387,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           ls_cr_context-ibase = lv_found_comp_detail-ibase.
           ls_cr_context-ibase_instance = lv_found_comp_detail-instance.
         ENDIF.
-        APPEND ls_cr_context TO lt_cr_context.
       ENDIF.
+      APPEND ls_cr_context TO lt_cr_context.
     ENDLOOP.
     IF lt_cr_context IS NOT INITIAL.
       SET UPDATE TASK LOCAL.

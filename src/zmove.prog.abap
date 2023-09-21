@@ -56,7 +56,7 @@ START-OF-SELECTION.
     INTO TABLE @lt_orders_data.
   IF sy-subrc EQ 0.
 
-    IF p_update IS INITIAL and p_test IS INITIAL.
+    IF p_update IS INITIAL AND p_test IS INITIAL.
       CALL FUNCTION 'POPUP_TO_CONFIRM'
         EXPORTING
           titlebar              = text-001
@@ -76,7 +76,7 @@ START-OF-SELECTION.
       ENDIF.
     ENDIF.
 
-    IF p_status IS NOT INITIAL and p_test IS INITIAL.
+    IF p_status IS NOT INITIAL AND p_test IS INITIAL.
       CALL FUNCTION 'POPUP_TO_CONFIRM'
         EXPORTING
           titlebar              = text-005
@@ -114,6 +114,7 @@ START-OF-SELECTION.
           iv_guid               = ls_order_data-guid
         IMPORTING
           lt_doc_properties     = ls_doc_properties
+          ev_message            = lt_messages
         EXCEPTIONS
           error_read_doc        = 1
           error_get_attachments = 2
@@ -123,6 +124,11 @@ START-OF-SELECTION.
         ls_output-message = 'Error reading document.'.
         APPEND ls_output TO lt_output.
       ELSE.
+        LOOP AT lt_messages INTO ls_message.
+          "processing results:
+          ls_output-message = ls_message.
+          APPEND ls_output TO lt_output.
+        ENDLOOP.
 
         IF p_status IS INITIAL.
           CLEAR ls_doc_properties-status.
@@ -130,7 +136,7 @@ START-OF-SELECTION.
         ENDIF.
 
         IF p_test IS INITIAL.
-
+          CLEAR lt_messages.
           TRY.
               "call RFC to create documnet in target system
               CALL FUNCTION 'Z_CREATE_DOC'
@@ -139,7 +145,6 @@ START-OF-SELECTION.
                   is_documentprops = ls_doc_properties
                 IMPORTING
                   et_messages      = lt_messages.
-
 
               LOOP AT lt_messages INTO ls_message.
                 "processing results:
