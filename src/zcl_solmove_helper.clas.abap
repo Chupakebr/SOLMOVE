@@ -460,26 +460,52 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       EXIT.
     ENDIF.
     "get guid of the created document
-    lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
+    lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h
+       EXCEPTIONS
+            document_locked             = 3
+            OTHERS                      = 7 ).
+    IF sy-subrc <> 0.
+      CASE sy-subrc.
+        WHEN 3.
+          lv_message = 'Error: document locked.'.
+        WHEN OTHERS.
+          lv_message = 'Error: setting header.'.
+      ENDCASE.
+      APPEND lv_message TO ev_message.
+      RETURN.
+    ENDIF.
+
 
     "set description
     lo_cd->set_short_text( EXPORTING iv_short_text = iv_documentprops-description ).
+    IF sy-subrc <> 0.
+      lv_message = 'Error: setting description.'.
+      APPEND lv_message TO ev_message.
+    ENDIF.
 
     "set priority
     IF iv_documentprops-priority IS NOT INITIAL.
       lo_cd->set_priority( EXPORTING iv_priority = iv_documentprops-priority ).
     ENDIF.
+    IF sy-subrc <> 0.
+      lv_message = 'Error: setting priority.'.
+      APPEND lv_message TO ev_message.
+    ENDIF.
 
     "set category
     IF iv_documentprops-category IS NOT INITIAL.
       lo_cd->set_category( EXPORTING iv_category = iv_documentprops-category ).
+      IF sy-subrc <> 0.
+        lv_message = 'Error: setting category.'.
+        APPEND lv_message TO ev_message.
+      ENDIF.
     ENDIF.
 
     "set soldoc data
     IF iv_documentprops-occ_ids IS NOT INITIAL.
       CALL METHOD zcl_solmove_helper=>set_soldoc
         EXPORTING
-          iv_guid    = ls_orderadm_h-guid "'C1C936BF52CD1EDE949549481F83CC79'
+          iv_guid    = ls_orderadm_h-guid
           it_occ_ids = iv_documentprops-occ_ids
         CHANGING
           iv_1o_api  = lo_cd.
