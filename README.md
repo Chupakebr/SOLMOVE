@@ -22,7 +22,7 @@ The following content will be moved:
 
 - SLA
 - Approval procedure
-- Test menegment data (test plans)
+- Test managment data (test plans)
 
 ! Multi-level category (requires mapping)
 ```
