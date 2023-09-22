@@ -5,8 +5,13 @@ class ZCL_SOLMOVE_HELPER definition
 
 public section.
 
-  class-methods SET_APPROVAL .
+  class-methods SET_CATEGORIES
+    importing
+      !IT_CATEGORIES type CRMT_SUBJECT_WRK
+    changing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API .
   class-methods GET_APPROVAL .
+  class-methods SET_APPROVAL .
   class-methods GET_SOLDOC
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
@@ -189,10 +194,9 @@ public section.
       !IV_DOC_PROPERTIES type ZDOC_PROPS_STRUCT .
   class-methods GET_CATEGORIES
     importing
-      !IV_GUID type CRMT_OBJECT_GUID
-      !IV_CATALOG_TYPE type CRMT_CATALOGTYPE optional
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
-      !RT_RESULT type CRMT_ERMS_CAT_CA_LANG_TAB .
+      !RT_RESULT type CRMT_SUBJECT_WRK .
 protected section.
 private section.
 ENDCLASS.
@@ -499,6 +503,14 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         lv_message = 'Error: setting category.'.
         APPEND lv_message TO ev_message.
       ENDIF.
+    ENDIF.
+
+    IF iv_documentprops-categories IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_categories
+        EXPORTING
+          it_categories = iv_documentprops-categories
+        CHANGING
+          iv_1o_api     = lo_cd.
     ENDIF.
 
     "set soldoc data
@@ -929,74 +941,99 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   METHOD get_categories.
-* low level function for debugging: crm_erms_cat_ca_read + crm_erms_cat_as_read.
 
-    TYPES :
-      tt_category TYPE  TABLE  OF  REF  TO if_crm_erms_catego_category.
 
-    DATA :
-      li_aspect     TYPE  REF  TO if_crm_erms_catego_aspect,
-      li_category   TYPE  REF  TO if_crm_erms_catego_category,
-      lr_categories TYPE  REF  TO data,
-      ls_cat_lang   TYPE crmt_erms_cat_ca_lang.
+** low level function for debugging: crm_erms_cat_ca_read + crm_erms_cat_as_read.
+*
+*    TYPES :
+*      tt_category TYPE  TABLE  OF  REF  TO if_crm_erms_catego_category.
+*
+*    DATA :
+*      li_aspect     TYPE  REF  TO if_crm_erms_catego_aspect,
+*      li_category   TYPE  REF  TO if_crm_erms_catego_category,
+*      lr_categories TYPE  REF  TO data,
+*      ls_cat_lang   TYPE crmt_erms_cat_ca_lang.
+*
+*    FIELD-SYMBOLS:
+*      <ft_category> TYPE tt_category,
+*      <fi_category> LIKE li_category.
+*
+** Ensure valid result.
+*    REFRESH rt_result[].
+*
+** Get Assigned Categorys.
+*    CALL METHOD cl_crm_ml_category_util=>get_categoryfirst
+*      EXPORTING
+*        iv_ref_guid     = iv_guid
+*        iv_ref_kind     = 'A'
+*        iv_catalog_type = iv_catalog_type
+*      IMPORTING
+*        er_aspect       = li_aspect
+*        er_category     = li_category.
+*
+*    CHECK li_aspect IS  BOUND  AND li_category IS  BOUND .
+*
+** Get All Parent Nodes.
+*    CALL METHOD cl_crm_ml_category_util=>get_cat_pars_all
+*      EXPORTING
+*        ir_aspect     = li_aspect
+*        ir_category   = li_category
+*      IMPORTING
+*        er_categories = lr_categories.
+*
+*    CHECK lr_categories IS  BOUND .
+*
+*    ASSIGN lr_categories->* TO <ft_category>.
+*
+** Don't forget our assigned category.
+*    INSERT li_category INTO <ft_category> INDEX 1.
+*
+*    LOOP  AT <ft_category> ASSIGNING <fi_category>.
+*
+** Get Category Details.
+*      CALL METHOD <fi_category>->get_details
+** EXPORTING
+** iv_auth_check = ''
+*        IMPORTING
+**         ev_cat      = ls_cat
+*          ev_cat_lang = ls_cat_lang.
+*
+** Ensure that description is filled.
+*      IF ls_cat_lang-cat_desc IS  INITIAL .
+*        ls_cat_lang-cat_desc = ls_cat_lang-cat_labl.
+*      ENDIF .
+*
+*      IF ls_cat_lang-cat_desc IS  INITIAL .
+*        ls_cat_lang-cat_desc = ls_cat_lang-cat-cat_id.
+*      ENDIF .
+*
+** Transfer Result
+*      INSERT ls_cat_lang INTO rt_result[] INDEX 1.
+*
+*    ENDLOOP .
+    DATA: lv_cat    TYPE crmt_subject_wrk.
 
-    FIELD-SYMBOLS:
-      <ft_category> TYPE tt_category,
-      <fi_category> LIKE li_category.
-
-* Ensure valid result.
-    REFRESH rt_result[].
-
-* Get Assigned Categorys.
-    CALL METHOD cl_crm_ml_category_util=>get_categoryfirst
-      EXPORTING
-        iv_ref_guid     = iv_guid
-        iv_ref_kind     = 'A'
-        iv_catalog_type = iv_catalog_type
+    CALL METHOD iv_1o_api->get_subject
       IMPORTING
-        er_aspect       = li_aspect
-        er_category     = li_category.
+        es_subject = rt_result.
+*       et_subject =
+*  EXCEPTIONS
+*       document_not_found   = 1
+*       error_occurred       = 2
+*       document_locked      = 3
+*       no_change_authority  = 4
+*       no_display_authority = 5
+*       no_change_allowed    = 6
+*       others     = 7
+    .
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
 
-    CHECK li_aspect IS  BOUND  AND li_category IS  BOUND .
+    IF sy-subrc <> 0.
+*     Implement suitable error handling here
+    ENDIF.
 
-* Get All Parent Nodes.
-    CALL METHOD cl_crm_ml_category_util=>get_cat_pars_all
-      EXPORTING
-        ir_aspect     = li_aspect
-        ir_category   = li_category
-      IMPORTING
-        er_categories = lr_categories.
-
-    CHECK lr_categories IS  BOUND .
-
-    ASSIGN lr_categories->* TO <ft_category>.
-
-* Don't forget our assigned category.
-    INSERT li_category INTO <ft_category> INDEX 1.
-
-    LOOP  AT <ft_category> ASSIGNING <fi_category>.
-
-* Get Category Details.
-      CALL METHOD <fi_category>->get_details
-* EXPORTING
-* iv_auth_check = ''
-        IMPORTING
-*         ev_cat      = ls_cat
-          ev_cat_lang = ls_cat_lang.
-
-* Ensure that description is filled.
-      IF ls_cat_lang-cat_desc IS  INITIAL .
-        ls_cat_lang-cat_desc = ls_cat_lang-cat_labl.
-      ENDIF .
-
-      IF ls_cat_lang-cat_desc IS  INITIAL .
-        ls_cat_lang-cat_desc = ls_cat_lang-cat-cat_id.
-      ENDIF .
-
-* Transfer Result
-      INSERT ls_cat_lang INTO rt_result[] INDEX 1.
-
-    ENDLOOP .
   ENDMETHOD.
 
 
@@ -1231,7 +1268,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     "get multi level categories
     CALL METHOD zcl_solmove_helper=>get_categories
       EXPORTING
-        iv_guid   = iv_guid
+        IV_1O_API = lo_api_object
       IMPORTING
         rt_result = lt_doc_properties-categories.
 
@@ -1789,6 +1826,31 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     endloop.
 
   endmethod.
+
+
+  METHOD set_categories.
+    DATA lv_cat TYPE crmt_subject_com.
+    MOVE-CORRESPONDING it_categories TO lv_cat.
+
+    lv_cat-ref_guid = iv_1o_api->get_guid( ).
+
+    CALL METHOD iv_1o_api->set_subject
+      EXPORTING
+        is_subject = lv_cat
+*      CHANGING
+*       cv_log_handle     =
+*      EXCEPTIONS
+*       error_occurred    = 1
+*       document_locked   = 2
+*       no_change_allowed = 3
+*       no_authority      = 4
+*       others     = 5
+      .
+    IF sy-subrc <> 0.
+*     Implement suitable error handling here
+    ENDIF.
+
+  ENDMETHOD.
 
 
   METHOD set_context.
