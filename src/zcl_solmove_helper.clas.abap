@@ -1030,10 +1030,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 * Implement suitable error handling here
     ENDIF.
 
-    IF sy-subrc <> 0.
-*     Implement suitable error handling here
-    ENDIF.
-
   ENDMETHOD.
 
 
@@ -1833,6 +1829,23 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     MOVE-CORRESPONDING it_categories TO lv_cat.
 
     lv_cat-ref_guid = iv_1o_api->get_guid( ).
+
+    CALL METHOD iv_1o_api->get_subject
+      IMPORTING
+        es_subject = DATA(lv_subj)
+*      EXCEPTIONS
+*       document_not_found   = 1
+*       error_occurred       = 2
+*       document_locked      = 3
+*       no_change_authority  = 4
+*       no_display_authority = 5
+*       no_change_allowed    = 6
+*       others     = 7
+      .
+    IF sy-subrc <> 0.
+*     Implement suitable error handling here
+    ENDIF.
+
 
     CALL METHOD iv_1o_api->set_subject
       EXPORTING
