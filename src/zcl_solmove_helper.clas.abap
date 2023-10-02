@@ -19,12 +19,16 @@ public section.
     importing
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
-      !ET_APPROVAL type CRMT_APPROVAL_WRK .
+      !ET_APPROVAL type CRMT_APPROVAL_WRK
+      !ET_APPROVAL_DB type ZAPPROVAL_DB .
   class-methods SET_APPROVAL
     importing
       !IV_GUID type CRMT_OBJECT_GUID
-    exporting
       !ET_APPROVAL type CRMT_APPROVAL_WRK .
+  class-methods SET_APPROVAL_DB
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+      !ET_APPROVAL_DB type ZAPPROVAL_DB .
   class-methods GET_SOLDOC
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
@@ -643,6 +647,12 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
+    "set approval procedure
+    CALL METHOD zcl_solmove_helper=>set_approval
+      EXPORTING
+        iv_guid     = ls_orderadm_h-guid
+        et_approval = iv_documentprops-approval.
+
     "set status
     " !status set should be the last action to allow other changes for closed document!
     IF iv_documentprops-status IS NOT INITIAL.
@@ -667,9 +677,15 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     "update creation information
     CALL METHOD zcl_solmove_helper=>set_creation_info
       EXPORTING
-        iv_guid           = lo_cd->get_guid( )
+        iv_guid           = ls_orderadm_h-guid
         iv_doc_properties = iv_documentprops.
 
+    IF iv_documentprops-approval_db IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_approval_db
+        EXPORTING
+          iv_guid        = ls_orderadm_h-guid
+          et_approval_db = iv_documentprops-approval_db.
+    ENDIF.
 
 *    Check if document was created?
     lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
@@ -726,7 +742,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   METHOD get_approval.
-    DATA: ls_approval_s_wrk   TYPE crmt_approval_s_wrk.
+    DATA: ls_approval_s_wrk TYPE crmt_approval_s_wrk,
+          lv_new_bp         TYPE crmt_aprv_partner_number,
+          lv_zer            TYPE i.
 
     "Input check
     IF iv_guid IS INITIAL.
@@ -756,9 +774,21 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           EXPORTING
             iv_partner = ls_approval_s_wrk-partner_no
           IMPORTING
-            ev_partner = ls_approval_s_wrk-partner_no.
+            ev_partner = lv_new_bp.
+
+        "add leading zeros
+        IF lv_new_bp IS NOT INITIAL.
+          lv_zer = strlen( lv_new_bp ).
+          DO 10 - lv_zer TIMES.
+            CONCATENATE '0' lv_new_bp INTO lv_new_bp.
+          ENDDO.
+          ls_approval_s_wrk-partner_no = lv_new_bp.
+          MODIFY et_approval-approval_steps_wrk FROM ls_approval_s_wrk.
+        ENDIF.
       ENDLOOP.
     ENDIF.
+
+    SELECT * FROM crmd_approval_s WHERE parent_guid = @et_approval-guid INTO TABLE @et_approval_db.
 
   ENDMETHOD.
 
@@ -810,25 +840,36 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   METHOD get_bp_mapping.
-    DATA: target_partner_no TYPE zsolmove_target,
+    DATA: lv_target_partner_no TYPE zsolmove_target,
+          lv_partner_no_con    TYPE crmt_partner_number,
           lv_zer, lv_part   TYPE i,
-          lv_part_conv      TYPE crmt_partner_number.
+          lv_part_conv         TYPE crmt_partner_number.
 
-    SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @iv_partner INTO @target_partner_no.
+    IF iv_partner(1) ='0'. "remove leading zeros
+      lv_part = iv_partner.
+      lv_partner_no_con = lv_part.
+      CONDENSE lv_partner_no_con.
+    ELSE.
+      lv_partner_no_con = iv_partner.
+    ENDIF.
 
-    IF target_partner_no IS INITIAL.
+    CHECK lv_partner_no_con IS NOT INITIAL.
+
+    SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @lv_partner_no_con INTO @lv_target_partner_no.
+
+    IF lv_target_partner_no IS INITIAL.
       "try to convert bp to 10 digets with leading zeros
-      lv_part_conv = iv_partner.
+      lv_part_conv = lv_partner_no_con.
       lv_zer = strlen( lv_part_conv ).
       DO 10 - lv_zer TIMES.
         CONCATENATE '0' lv_part_conv INTO lv_part_conv.
       ENDDO.
-      SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @lv_part_conv INTO @target_partner_no.
-      lv_part = target_partner_no. "now remove leading zeros.
+      SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @lv_part_conv INTO @lv_target_partner_no.
+      lv_part = lv_target_partner_no. "now remove leading zeros.
       ev_partner = lv_part.
       CONDENSE ev_partner.
     ELSE.
-      ev_partner = target_partner_no.
+      ev_partner = lv_target_partner_no.
     ENDIF.
   ENDMETHOD.
 
@@ -1147,7 +1188,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       IMPORTING
         ev_custom_fields = lt_doc_properties-custom_fields.
 
-    "get partners
+    "get business partners
     CALL METHOD zcl_solmove_helper=>get_partners
       EXPORTING
         iv_1o_api  = lo_api_object
@@ -1157,7 +1198,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     "get multi level categories
     CALL METHOD zcl_solmove_helper=>get_categories
       EXPORTING
-        IV_1O_API = lo_api_object
+        iv_1o_api = lo_api_object
       IMPORTING
         rt_result = lt_doc_properties-categories.
 
@@ -1180,8 +1221,16 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       EXPORTING
         iv_1o_api = lo_api_object
       IMPORTING
-        et_smuds  = lt_doc_properties-occ_ids
-        .
+        et_smuds  = lt_doc_properties-occ_ids.
+
+    "get approval procedure
+    CALL METHOD zcl_solmove_helper=>get_approval
+      EXPORTING
+        iv_guid        = iv_guid
+      IMPORTING
+        et_approval    = lt_doc_properties-approval
+        et_approval_db = lt_doc_properties-approval_db.
+
 
   ENDMETHOD.
 
@@ -1641,7 +1690,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   METHOD set_approval.
-    DATA: ls_approval_wrk_new TYPE crmt_approval_wrk,
+    DATA: ls_approval_wrk_old TYPE crmt_approval_wrk,
+          ls_approval_wrk_new TYPE crmt_approval_wrk,
           ls_approval_com     TYPE crmt_approval_com,
           ls_input_field_name TYPE crmt_input_field_names,
           ls_input_field      TYPE crmt_input_field,
@@ -1650,128 +1700,279 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lt_approval_s_com   TYPE crmt_approval_s_comt,
           ls_approval_s_com   TYPE crmt_approval_s_com,
           lv_guid(32)         TYPE c,
-          lv_memory_id(50)    TYPE c.
+          lv_memory_id(50)    TYPE c,
+          ls_approval         TYPE crmd_approval_s,
+          lt_approval_t       TYPE TABLE OF crmd_approval_s.
 
     INCLUDE crm_approval_con.
     INCLUDE crm_object_names_con.
 
 ** Maintain Approval Procedure only if Approval Procedure is available
     CHECK et_approval IS NOT INITIAL.
-* maintain approval procedure first because without approval no steps can be created
-    ls_approval_com-ref_guid = iv_guid.
-    ls_approval_com-ref_kind = 'A'.
-    ls_approval_com-aprv_procedure = et_approval-aprv_procedure.
-
-** Set flag to allow edit steps at the beginning (will be disabled once status in "Approved")
-    ls_approval_com-change_allowed = abap_true.
-
-** Fill input fields
-    ls_input_field-ref_guid = iv_guid.
-    ls_input_field-ref_kind = 'A'.
-    CALL METHOD cl_crm_approval_utility=>build_logical_key
-      EXPORTING
-        iv_guid        = iv_guid
-        iv_object      = gc_logical_object-approval
-      RECEIVING
-        rv_logical_key = ls_input_field-logical_key.
-
-    ls_input_field-objectname = gc_object_name-approval.
-
-    ls_input_field_name-fieldname = 'APRV_PROCEDURE'.       "#EC NOTEXT
-    INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
-    ls_input_field_name-fieldname = 'CHANGE_ALLOWED'.       "#EC NOTEXT
-    INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
-
-    INSERT ls_input_field INTO TABLE lt_input_fields.
-
-    CALL FUNCTION 'CRM_APPROVAL_MAINTAIN_OW'
-      EXPORTING
-        is_approval_com = ls_approval_com
-      CHANGING
-        ct_input_fields = lt_input_fields
-      EXCEPTIONS
-        error_occurred  = 1
-        OTHERS          = 2.
-
-    CHECK sy-subrc EQ 0.
-
-** now maintain approval steps
-    "Read the approval procedure to get SET_GUID of Approval
+*get mapped approval if exist
+    "Read the approval of the source document
     CALL FUNCTION 'CRM_APPROVAL_READ_OB'
       EXPORTING
         iv_ref_guid          = iv_guid
         iv_ref_kind          = 'A'
       IMPORTING
-        es_approval_wrk      = ls_approval_wrk_new
+        es_approval_wrk      = ls_approval_wrk_old
       EXCEPTIONS
         entry_does_not_exist = 1
         parameter_error      = 2
         OTHERS               = 3.
 
+    IF sy-subrc <> 0.
+      "no approval procedure or error - copy not possible
+      RETURN.
+    ENDIF.
+
+    IF ls_approval_wrk_old IS INITIAL.
+
+* maintain approval procedure first because without approval no steps can be created
+      ls_approval_com-ref_guid = iv_guid.
+      ls_approval_com-ref_kind = 'A'.
+      ls_approval_com-aprv_procedure = et_approval-aprv_procedure.
+
+** Set flag to allow edit steps at the beginning (will be disabled once status in "Approved")
+      ls_approval_com-change_allowed = abap_true.
+
+** Fill input fields
+      ls_input_field-ref_guid = iv_guid.
+      ls_input_field-ref_kind = 'A'.
+      CALL METHOD cl_crm_approval_utility=>build_logical_key
+        EXPORTING
+          iv_guid        = iv_guid
+          iv_object      = gc_logical_object-approval
+        RECEIVING
+          rv_logical_key = ls_input_field-logical_key.
+
+      ls_input_field-objectname = gc_object_name-approval.
+
+      ls_input_field_name-fieldname = 'APRV_PROCEDURE'.     "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'CHANGE_ALLOWED'.     "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+
+      INSERT ls_input_field INTO TABLE lt_input_fields.
+
+      CALL FUNCTION 'CRM_APPROVAL_MAINTAIN_OW'
+        EXPORTING
+          is_approval_com = ls_approval_com
+        CHANGING
+          ct_input_fields = lt_input_fields
+        EXCEPTIONS
+          error_occurred  = 1
+          OTHERS          = 2.
+
+      CHECK sy-subrc EQ 0.
+
+** now maintain approval steps
+      "Read the approval procedure to get SET_GUID of Approval
+      CALL FUNCTION 'CRM_APPROVAL_READ_OB'
+        EXPORTING
+          iv_ref_guid          = iv_guid
+          iv_ref_kind          = 'A'
+        IMPORTING
+          es_approval_wrk      = ls_approval_wrk_new
+        EXCEPTIONS
+          entry_does_not_exist = 1
+          parameter_error      = 2
+          OTHERS               = 3.
+
 * copy steps from old to new document
-    LOOP AT et_approval-approval_steps_wrk INTO ls_approval_s_wrk.
-
-      ls_approval_s_com-ref_guid       = iv_guid.
-      ls_approval_s_com-parent_guid    = ls_approval_wrk_new-guid.
-      ls_approval_s_com-step_id        = ls_approval_s_wrk-step_id.
-      ls_approval_s_com-step_no        = ls_approval_s_wrk-step_no.
-      ls_approval_s_com-step_sequence  = ls_approval_s_wrk-step_sequence.
-      ls_approval_s_com-step_type      = ls_approval_s_wrk-step_type.
-      ls_approval_s_com-partner_fct    = ls_approval_s_wrk-partner_fct.
-      ls_approval_s_com-partner_no     = ls_approval_s_wrk-partner_no.
-      ls_approval_s_com-aprv_status_pf = ls_approval_s_wrk-aprv_status_pf.
-      APPEND ls_approval_s_com TO lt_approval_s_com.
-
-    ENDLOOP.
+      LOOP AT et_approval-approval_steps_wrk INTO ls_approval_s_wrk.
+        MOVE-CORRESPONDING  ls_approval_s_wrk TO ls_approval_s_com.
+        ls_approval_s_com-ref_guid       = iv_guid.
+        ls_approval_s_com-parent_guid    = ls_approval_wrk_new-guid.
+        APPEND ls_approval_s_com TO lt_approval_s_com.
+      ENDLOOP.
 ** Fill input fields for approval steps
-    CLEAR: lt_input_fields, ls_input_field.
+      CLEAR: lt_input_fields, ls_input_field.
 
-    ls_input_field-ref_guid = iv_guid.
-    ls_input_field-ref_kind = 'A'.
-    CALL METHOD cl_crm_approval_utility=>build_logical_key
-      EXPORTING
-        iv_guid        = iv_guid
-        iv_object      = gc_logical_object-approval_s
-      RECEIVING
-        rv_logical_key = ls_input_field-logical_key.
+      ls_input_field-ref_guid = iv_guid.
+      ls_input_field-ref_kind = 'A'.
+      CALL METHOD cl_crm_approval_utility=>build_logical_key
+        EXPORTING
+          iv_guid        = iv_guid
+          iv_object      = gc_logical_object-approval_s
+        RECEIVING
+          rv_logical_key = ls_input_field-logical_key.
 
-    ls_input_field-objectname = gc_object_name-approval.
+      ls_input_field-objectname = gc_object_name-approval.
 
-    ls_input_field_name-fieldname = 'APRV_STATUS_PF'.       "#EC NOTEXT
-    INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
-    ls_input_field_name-fieldname = 'PARTNER_FCT'.          "#EC NOTEXT
-    INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
-    ls_input_field_name-fieldname = 'PARTNER_NO'.           "#EC NOTEXT
-    INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
-    ls_input_field_name-fieldname = 'STEP_ID'.              "#EC NOTEXT
-    INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
-    ls_input_field_name-fieldname = 'STEP_SEQUENCE'.        "#EC NOTEXT
-    INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
-    ls_input_field_name-fieldname = 'STEP_TYPE'.            "#EC NOTEXT
-    INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'APRV_STATUS_PF'.     "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'PARTNER_FCT'.        "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'PARTNER_NO'.         "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'STEP_ID'.            "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'STEP_SEQUENCE'.      "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'STEP_TYPE'.          "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'EXECUTION_STATUS'.   "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'APRV_ACT'.           "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'PROCESSED_BY'.       "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'IS_RELEVANT'.        "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
 
-    INSERT ls_input_field INTO TABLE lt_input_fields.
 
-    CALL FUNCTION 'CRM_APPROVAL_S_MAINTAIN_M_OW'
-      EXPORTING
-        iv_parent_guid    = ls_approval_wrk_new-guid
-        it_approval_s_com = lt_approval_s_com
-        iv_ref_guid       = iv_guid
-        iv_ref_kind       = 'A'
-      CHANGING
-        ct_input_fields   = lt_input_fields
-      EXCEPTIONS
-        error_occurred    = 1
-        OTHERS            = 2.
+      INSERT ls_input_field INTO TABLE lt_input_fields.
 
-    CHECK sy-subrc EQ 0.
+      CALL FUNCTION 'CRM_APPROVAL_S_MAINTAIN_M_OW'
+        EXPORTING
+          iv_parent_guid    = ls_approval_wrk_new-guid
+          it_approval_s_com = lt_approval_s_com
+          iv_ref_guid       = iv_guid
+          iv_ref_kind       = 'A'
+        CHANGING
+          ct_input_fields   = lt_input_fields
+        EXCEPTIONS
+          error_occurred    = 1
+          OTHERS            = 2.
+
+      CHECK sy-subrc EQ 0.
 
 * fill memory, Memory will be checked in FM AIC_APPROVAL_S_DETERMINE_EC
 * to avoid to overwrite the approval by standard determination
-    lv_guid = iv_guid.
-    CONCATENATE lv_guid '/' gc_object_name-approval INTO lv_memory_id.
-    EXPORT approval = abap_true TO MEMORY ID lv_memory_id.
+      lv_guid = iv_guid.
+      CONCATENATE lv_guid '/' gc_object_name-approval INTO lv_memory_id.
+      EXPORT approval = abap_true TO MEMORY ID lv_memory_id.
 
+    ELSE.
+      " first allow change to approval proc.
+      IF ls_approval_wrk_old-change_allowed <> abap_true.
+        MOVE-CORRESPONDING ls_approval_wrk_old TO ls_approval_com.
+        ls_approval_com-change_allowed = abap_true.
+
+        ls_input_field-ref_guid   = ls_approval_com-ref_guid.
+        ls_input_field-ref_kind   = ls_approval_com-ref_kind.
+        ls_input_field-objectname = gc_object_name-approval.
+        CALL METHOD cl_crm_approval_utility=>build_logical_key
+          EXPORTING
+            iv_guid        = iv_guid
+            iv_handle      = ls_approval_com-ref_handle
+            iv_object      = gc_logical_object-approval
+          RECEIVING
+            rv_logical_key = ls_input_field-logical_key.
+
+        ls_input_field_name-fieldname = 'CHANGE_ALLOWED'.   "#EC NOTEXT
+        INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+        INSERT ls_input_field INTO TABLE lt_input_fields.
+
+        CALL FUNCTION 'CRM_APPROVAL_MAINTAIN_OW'
+          EXPORTING
+            is_approval_com = ls_approval_com
+          CHANGING
+            ct_input_fields = lt_input_fields
+          EXCEPTIONS
+            error_occurred  = 1
+            OTHERS          = 2.
+        CHECK sy-subrc EQ 0.
+
+      ENDIF.
+
+      "approval procedure was created before. Just change the steps.
+      LOOP AT et_approval-approval_steps_wrk INTO ls_approval_s_wrk.
+        CLEAR ls_approval.
+        MOVE-CORRESPONDING  ls_approval_s_wrk TO ls_approval_s_com.
+        ls_approval_s_com-ref_guid       = iv_guid.
+        ls_approval_s_com-parent_guid    = ls_approval_wrk_old-guid. "!
+        APPEND ls_approval_s_com TO lt_approval_s_com.
+      ENDLOOP.
+** Fill input fields for approval steps
+      CLEAR: lt_input_fields, ls_input_field.
+
+      ls_input_field-ref_guid = iv_guid.
+      ls_input_field-ref_kind = 'A'.
+      CALL METHOD cl_crm_approval_utility=>build_logical_key
+        EXPORTING
+          iv_guid        = iv_guid
+          iv_object      = gc_logical_object-approval_s
+        RECEIVING
+          rv_logical_key = ls_input_field-logical_key.
+
+      ls_input_field-objectname = gc_object_name-approval.
+
+      ls_input_field_name-fieldname = 'APRV_STATUS_PF'.     "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'PARTNER_FCT'.        "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'PARTNER_NO'.         "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'STEP_ID'.            "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'STEP_SEQUENCE'.      "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'STEP_TYPE'.          "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'EXECUTION_STATUS'.   "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'APRV_ACT'.           "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'PROCESSED_BY'.       "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+      ls_input_field_name-fieldname = 'IS_RELEVANT'.        "#EC NOTEXT
+      INSERT ls_input_field_name INTO TABLE ls_input_field-field_names.
+
+      INSERT ls_input_field INTO TABLE lt_input_fields.
+
+      CALL FUNCTION 'CRM_APPROVAL_S_MAINTAIN_M_OW'
+        EXPORTING
+          iv_parent_guid    = ls_approval_wrk_old-guid
+          it_approval_s_com = lt_approval_s_com
+          iv_ref_guid       = iv_guid
+          iv_ref_kind       = 'A'
+        CHANGING
+          ct_input_fields   = lt_input_fields
+        EXCEPTIONS
+          error_occurred    = 1
+          OTHERS            = 2.
+
+      CHECK sy-subrc EQ 0.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD set_approval_db.
+    DATA: ls_approval_wrk TYPE crmt_approval_wrk,
+          ls_approval     TYPE crmd_approval_s,
+          ls_approval_n   TYPE crmd_approval_s,
+          lt_approval_t   TYPE TABLE OF crmd_approval_s.
+
+    "Read the approval of the source document
+    CALL FUNCTION 'CRM_APPROVAL_READ_OB'
+      EXPORTING
+        iv_ref_guid          = iv_guid
+        iv_ref_kind          = 'A'
+      IMPORTING
+        es_approval_wrk      = ls_approval_wrk
+      EXCEPTIONS
+        entry_does_not_exist = 1
+        parameter_error      = 2
+        OTHERS               = 3.
+
+** Maintain Approval Procedure only if Approval Procedure is available
+    CHECK et_approval_db IS NOT INITIAL AND ls_approval_wrk IS NOT INITIAL.
+    LOOP AT et_approval_db INTO ls_approval.
+      ls_approval-parent_guid       = ls_approval_wrk-guid.
+      SELECT SINGLE guid FROM crmd_approval_s
+        WHERE parent_guid = @ls_approval_wrk-guid AND
+        step_no = @ls_approval-step_no
+        INTO @ls_approval-guid.
+      APPEND ls_approval TO lt_approval_t.
+    ENDLOOP.
+
+    "modify CRMD_APPROVAL_S table
+    MODIFY crmd_approval_s FROM TABLE lt_approval_t .
   ENDMETHOD.
 
 
