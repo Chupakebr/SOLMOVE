@@ -15,17 +15,23 @@ public section.
       !IT_CATEGORIES type CRMT_SUBJECT_WRK
     changing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API .
+  class-methods SET_SLA
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+    exporting
+      !ET_SLA_DB type ZSLA_SRCL_TT .
   class-methods GET_APPROVAL
     importing
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
       !ET_APPROVAL type CRMT_APPROVAL_WRK
       !ET_APPROVAL_DB type ZAPPROVAL_DB .
-  class-methods SET_SLA
+  class-methods GET_TEST_DATA
     importing
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
-      !ET_SLA_DB type ZSLA_SRCL_TT .
+      !ET_APPROVAL type CRMT_APPROVAL_WRK
+      !ET_APPROVAL_DB type ZAPPROVAL_DB .
   class-methods GET_SLA
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -1384,6 +1390,77 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     endselect.
 
   endmethod.
+
+
+  METHOD get_test_data.
+    DATA lt_context     TYPE TABLE OF ssocm_i_context.
+    DATA ls_twb         TYPE aic_s_twb_cont_display.
+    DATA lv_object_name TYPE crmt_ext_obj_name.
+
+    INCLUDE: crm_events_con,  crm_object_kinds_con.
+
+* Buffer new entries from DB
+    CALL FUNCTION 'GET_CRM_CONTEXT_DB_VIEW'
+      EXPORTING
+        im_crm_object_guid = iv_guid
+      TABLES
+        ch_socm_db_view    = lt_context.
+
+* Add entries to new document
+    LOOP AT lt_context INTO DATA(ls_context).
+
+      IF ls_context-context_type = cl_ai_crm_utility=>c_cont_type_testplan OR " Test Plan
+         ls_context-context_type = cl_ai_crm_utility=>c_cont_type_testpack.   " Test Package
+
+*        "GUID of Test Mgmt AB entry
+*        TRY.
+*            ls_twb-twb_node_guid = cl_system_uuid=>create_uuid_x16_static( ).
+*          CATCH cx_uuid_error.
+*        ENDTRY.
+*
+*        " Context Type - Test Plan or Test Package
+*        ls_twb-context_type = ls_context-context_type.
+*
+*        " External ID - contain Test Plan id or both (Test Plan and Package)
+*        IF ls_context-context_type = cl_ai_crm_utility=>c_cont_type_testplan.
+*          ls_twb-tpln_id = ls_context-external_id.
+*        ELSEIF ls_context-context_type = cl_ai_crm_utility=>c_cont_type_testpack.
+*          SPLIT ls_context-external_id AT '#' INTO ls_twb-tpck_id ls_twb-tpln_id.
+*        ENDIF.
+*
+*        " GUID of new CRM Document
+*        ls_twb-crm_document_guid = is_target-guid.
+*
+*        " Text of Test Object
+*        ls_twb-twb_node_text  = ls_context-text.
+*
+*        "Create Test Mgmt AB entry in backend API buffer for new document
+*        DATA(lv_success) = cl_aic_twb_cont_backend_api=>create( ls_twb ).
+*
+*        IF lv_success = abap_false.
+*          EXIT. " if no data could be created, do not save anything!
+*        ENDIF.
+*
+*        CLEAR ls_twb.
+
+      ENDIF.
+
+    ENDLOOP.
+
+** Save entries only if successful maintained in buffer
+*    IF lv_success = abap_true.
+** Publish change to trigger SAVE EC FuBa when SAVE event is raised
+*      lv_object_name = cl_ai_crm_cm_twb_cont_run_btil=>c_relation_twb_context. "'BTAICTWBContext'.
+*      TRANSLATE lv_object_name TO UPPER CASE.
+*      CALL FUNCTION 'CRM_EVENT_PUBLISH_OW'
+*        EXPORTING
+*          iv_obj_name = lv_object_name   "iv_objname is case sensitive, must be identical with entry in CRMV_OBJ_FUNC
+*          iv_guid_hi  = is_target-guid
+*          iv_kind_hi  = gc_object_kind-orderadm_h    "'A'
+*          iv_event    = gc_event-after_change.
+*    ENDIF.
+
+  ENDMETHOD.
 
 
   METHOD get_texts.
