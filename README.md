@@ -19,12 +19,10 @@ The following content will be moved:
 + Reach Texts
 + Links to other documents (CRM)
 + Scope
-
-- SLA
-- Approval procedure
++ SLA
++ Approval procedure
++ Multi-level category (requires mapping)
 - Test managment data (test plans)
-
-! Multi-level category (requires mapping)
 ```
 
 # Instalation
