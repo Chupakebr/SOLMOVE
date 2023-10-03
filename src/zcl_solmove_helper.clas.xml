@@ -15,7 +15,7 @@
     <item>
      <ID>I</ID>
      <KEY>001</KEY>
-     <ENTRY>No mapping for transactiom</ENTRY>
+     <ENTRY>No mapping for transaction</ENTRY>
      <LENGTH>52</LENGTH>
     </item>
    </TPOOL>
@@ -89,6 +89,11 @@
      <CMPNAME>GET_PARTNERS</CMPNAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Get custom WEBUI fields created with AET</DESCRIPT>
+    </SEOCOMPOTX>
+    <SEOCOMPOTX>
+     <CMPNAME>GET_SLA</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Get approvals</DESCRIPT>
     </SEOCOMPOTX>
     <SEOCOMPOTX>
      <CMPNAME>GET_SOLDOC</CMPNAME>
@@ -169,6 +174,11 @@
      <CMPNAME>SET_IBASE</CMPNAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Set ibase id</DESCRIPT>
+    </SEOCOMPOTX>
+    <SEOCOMPOTX>
+     <CMPNAME>SET_SLA</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Get approvals</DESCRIPT>
     </SEOCOMPOTX>
     <SEOCOMPOTX>
      <CMPNAME>SET_SOLDOC</CMPNAME>
@@ -313,9 +323,27 @@
     </SEOSUBCOTX>
     <SEOSUBCOTX>
      <CMPNAME>GET_PARTNERS</CMPNAME>
+     <SCONAME>EV_MESSAGE</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Processing log for document</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>GET_PARTNERS</CMPNAME>
      <SCONAME>LT_PARTNER</SCONAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Transfer Table for Partners to Partner Processing</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>GET_SLA</CMPNAME>
+     <SCONAME>ET_SLA_DB</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Approval Step control data</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>GET_SLA</CMPNAME>
+     <SCONAME>IV_GUID</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>GUID of a CRM Order Object</DESCRIPT>
     </SEOSUBCOTX>
     <SEOSUBCOTX>
      <CMPNAME>GET_SOLDOC</CMPNAME>
@@ -466,6 +494,18 @@
      <SCONAME>LT_DOCS</SCONAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Transfer Table for Partners to Partner Processing</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>SET_SLA</CMPNAME>
+     <SCONAME>ET_SLA_DB</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Approval Step control data</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>SET_SLA</CMPNAME>
+     <SCONAME>IV_GUID</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>GUID of a CRM Order Object</DESCRIPT>
     </SEOSUBCOTX>
     <SEOSUBCOTX>
      <CMPNAME>SET_SOLDOC</CMPNAME>

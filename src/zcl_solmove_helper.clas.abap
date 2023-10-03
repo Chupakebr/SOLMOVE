@@ -21,6 +21,16 @@ public section.
     exporting
       !ET_APPROVAL type CRMT_APPROVAL_WRK
       !ET_APPROVAL_DB type ZAPPROVAL_DB .
+  class-methods SET_SLA
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+    exporting
+      !ET_SLA_DB type ZSLA_SRCL_TT .
+  class-methods GET_SLA
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+    exporting
+      !ET_SLA_DB type ZSLA_SRCL_TT .
   class-methods SET_APPROVAL
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -100,7 +110,9 @@ public section.
       ERROR_GET_ATTACHMENTS
       ERROR_NO_TARGET_TTYPE
       ERROR_CYCLE_NOT_MAPPED
-      ERROR_IBASE_NOT_MAPPED .
+      ERROR_IBASE_NOT_MAPPED
+      ERROR_NO_ID
+      ERROR_NO_GUID .
   class-methods CREATE_DOC
     importing
       !IV_DOCUMENTPROPS type ZDOC_PROPS_STRUCT
@@ -129,6 +141,7 @@ public section.
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
       !LT_PARTNER type COMT_PARTNER_COMT
+      !EV_MESSAGE type ZPROCESS_LOG_TT
     exceptions
       ERROR_NOT_MAPPED .
   class-methods GET_WEBUI_FIELDS
@@ -672,8 +685,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       APPEND lv_message TO ev_message.
     ENDIF.
 
-    COMMIT WORK.
-
     "update creation information
     CALL METHOD zcl_solmove_helper=>set_creation_info
       EXPORTING
@@ -686,6 +697,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           iv_guid        = ls_orderadm_h-guid
           et_approval_db = iv_documentprops-approval_db.
     ENDIF.
+
+    COMMIT WORK.
 
 *    Check if document was created?
     lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
@@ -865,9 +878,11 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         CONCATENATE '0' lv_part_conv INTO lv_part_conv.
       ENDDO.
       SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @lv_part_conv INTO @lv_target_partner_no.
-      lv_part = lv_target_partner_no. "now remove leading zeros.
-      ev_partner = lv_part.
-      CONDENSE ev_partner.
+      IF lv_target_partner_no IS NOT INITIAL.
+        lv_part = lv_target_partner_no. "now remove leading zeros.
+        ev_partner = lv_part.
+        CONDENSE ev_partner.
+      ENDIF.
     ELSE.
       ev_partner = lv_target_partner_no.
     ENDIF.
@@ -1058,7 +1073,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lt_attachment_list  TYPE ags_t_crm_attachment,
           lt_partner_wrkt     TYPE crmt_partner_external_wrkt,
           lt_partner          TYPE comt_partner_comt,
-          lv_message          TYPE tdline.
+          lv_message          TYPE tdline,
+          lt_messages         TYPE zprocess_log_tt.
 
     "Get document instance
     CALL METHOD cl_ags_crm_1o_api=>get_instance
@@ -1109,11 +1125,19 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     lt_doc_properties-object_id-value = ls_orderadm_h-object_id.
     SELECT SINGLE sub_type, target FROM zsolmove_mapping WHERE type = 'ID'
       INTO (@lt_doc_properties-object_id-target_table, @lt_doc_properties-object_id-target_field).
+    IF sy-subrc = 4.
+      MESSAGE text-001 TYPE 'E'
+      RAISING error_no_id.
+    ENDIF.
 
     "save document guid, just for history
     lt_doc_properties-object_guid-value = ls_orderadm_h-guid.
     SELECT SINGLE sub_type, target FROM zsolmove_mapping WHERE type = 'GUID'
       INTO (@lt_doc_properties-object_guid-target_table, @lt_doc_properties-object_guid-target_field).
+    IF sy-subrc = 4.
+      MESSAGE text-001 TYPE 'E'
+      RAISING error_no_guid.
+    ENDIF.
 
     "get all statuses of the document
     CALL METHOD zcl_solmove_helper=>get_status
@@ -1156,7 +1180,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         IMPORTING
           ev_ibase = lt_doc_properties-ibase.
       IF sy-subrc <> 0.
-        CONCATENATE 'Error mapping iBase:' lv_refobj-product_id INTO lv_message SEPARATED BY space.
+        CONCATENATE 'No mapping for iBase:' lv_refobj-product_id INTO lv_message SEPARATED BY space.
         APPEND lv_message TO ev_message.
       ENDIF.
     ENDIF.
@@ -1193,7 +1217,12 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       EXPORTING
         iv_1o_api  = lo_api_object
       IMPORTING
-        lt_partner = lt_doc_properties-partners.
+        lt_partner = lt_doc_properties-partners
+        ev_message = lt_messages.
+
+    LOOP AT lt_messages INTO lv_message.
+      APPEND lv_message TO ev_message.
+    ENDLOOP.
 
     "get multi level categories
     CALL METHOD zcl_solmove_helper=>get_categories
@@ -1264,7 +1293,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     DATA: lt_partner_wrkt   TYPE crmt_partner_external_wrkt,
           ls_partner        TYPE comt_partner_com,
           lv_part_conv      TYPE crmt_partner_number,
-          target_partner_no TYPE zsolmove_target.
+          target_partner_no TYPE zsolmove_target,
+          lv_message        TYPE tdline.
 
     CALL METHOD iv_1o_api->get_partners
       IMPORTING
@@ -1287,18 +1317,28 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           IMPORTING
             ev_partner = lv_part_conv.
 
-        IF lv_part_conv  IS NOT INITIAL.
+        IF lv_part_conv IS NOT INITIAL.
           ls_partner-partner_no     = lv_part_conv.
           ls_partner-partner_fct    = ls_partner_wrk-ref_partner_fct.
           ls_partner-no_type        = ls_partner_wrk-ref_no_type.
           ls_partner-display_type   = ls_partner_wrk-ref_display_type.
           INSERT ls_partner INTO TABLE lt_partner.
+        ELSE.
+          CONCATENATE 'BP:' ls_partner_wrk-ref_partner_no 'not mapped.' INTO lv_message SEPARATED BY space.
+          APPEND lv_message to ev_message.
         ENDIF.
 
         CLEAR ls_partner.
         CLEAR target_partner_no.
       ENDLOOP.
     ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_sla.
+"   DATA: .
+    SELECT * FROM crmd_srcl_h WHERE guid = @iv_guid INTO TABLE @et_sla_db.
+
   ENDMETHOD.
 
 
@@ -2354,6 +2394,25 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
+  METHOD set_sla.
+    DATA: lt_sla         TYPE TABLE OF crmd_srcl_h,
+          ls_sla         TYPE  crmd_srcl_h,
+          lv_record_guid TYPE guid_16.
+
+    LOOP AT et_sla_db INTO ls_sla.
+      ls_sla-guid = iv_guid.
+      CALL FUNCTION 'GUID_CREATE'
+        IMPORTING
+          ev_guid_16 = lv_record_guid.
+      ls_sla-record  = lv_record_guid.
+      APPEND ls_sla TO lt_sla.
+    ENDLOOP.
+
+    MODIFY crmd_srcl_h FROM TABLE lt_sla.
+
+  ENDMETHOD.
+
+
   METHOD set_soldoc.
 *
 *    data:
@@ -2437,106 +2496,106 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
-  method set_status.
-    data:
-      lv_status_u    type crm_j_status,
-      lv_status_c    type crm_j_status,
-      lt_status_com  type crmt_status_comt,
-      ls_status_com  type crmt_status_com,
-      lt_status      type crmt_status_wrkt,
-      lt_stat_schema type crm_j_stsma,
-      lv_stat_hist   type line of zstatus_tt_history.
+  METHOD set_status.
+    DATA:
+      lv_status_u    TYPE crm_j_status,
+      lv_status_c    TYPE crm_j_status,
+      lt_status_com  TYPE crmt_status_comt,
+      ls_status_com  TYPE crmt_status_com,
+      lt_status      TYPE crmt_status_wrkt,
+      lt_stat_schema TYPE crm_j_stsma,
+      lv_stat_hist   TYPE LINE OF zstatus_tt_history.
 
-    data: ls_status_int         type jstat.
-    data: lt_status_int         type standard table of jstat.
+    DATA: ls_status_int         TYPE jstat.
+    DATA: lt_status_int         TYPE STANDARD TABLE OF jstat.
 
 *check status
     iv_1o_api->get_status(
-      importing
+      IMPORTING
         ev_user_status       = lv_status_u
         et_status            = lt_status
-      exceptions
+      EXCEPTIONS
         document_not_found   = 1
         error_occurred       = 2
         document_locked      = 3
         no_change_authority  = 4
         no_display_authority = 5
         no_change_allowed    = 6
-        others               = 7
+        OTHERS               = 7
     ).
-    if sy-subrc <> 0.
-    endif.
+    IF sy-subrc <> 0.
+    ENDIF.
 
-    read table lt_status into data(ls_status) with key status = lv_status_u. "#EC CI_SORTSEQ
-    move-corresponding ls_status to ls_status_com.
+    READ TABLE lt_status INTO DATA(ls_status) WITH KEY status = lv_status_u. "#EC CI_SORTSEQ
+    MOVE-CORRESPONDING ls_status TO ls_status_com.
 
-    loop at iv_status into lv_status_c.
-      if lv_status_c(1) = 'E'. "set user statuses
-        if lv_status_c <> lv_status_u.
+    LOOP AT iv_status INTO lv_status_c.
+      IF lv_status_c(1) = 'E'. "set user statuses
+        IF lv_status_c <> lv_status_u.
           ls_status_com-status = lv_status_c.
 
           ls_status_com-ref_guid       = ls_status-guid.
           ls_status_com-ref_kind       = 'A'.
           ls_status_com-activate       = 'X'.
 
-          append ls_status_com to lt_status_com.
+          APPEND ls_status_com TO lt_status_com.
 
-        endif.
-      else."set system status
-        read table lt_status into data(ls_status_sys) with key user_stat_proc = ''. "#EC CI_SORTSEQ
-        move-corresponding ls_status_sys to ls_status_com.
-        if lv_status_c <> ls_status_com-status.
+        ENDIF.
+      ELSE."set system status
+        READ TABLE lt_status INTO DATA(ls_status_sys) WITH KEY user_stat_proc = ''. "#EC CI_SORTSEQ
+        MOVE-CORRESPONDING ls_status_sys TO ls_status_com.
+        IF lv_status_c <> ls_status_com-status.
 
           ls_status_int-inact = space.
           ls_status_int-stat  = lv_status_c.
-          append ls_status_int to lt_status_int.
+          APPEND ls_status_int TO lt_status_int.
 
 *          ls_status_int-inact = 'X'.
 *          ls_status_int-stat  = ls_status_com-status.
 *          append ls_status_int to lt_status_int.
 
-        endif.
-      endif.
-    endloop.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
 
-    if lt_status_com is not initial.
+    IF lt_status_com IS NOT INITIAL.
       iv_1o_api->set_status(
-            exporting
+            EXPORTING
               it_status         =     lt_status_com
-            exceptions
+            EXCEPTIONS
               document_locked   = 1
               error_occurred    = 2
               no_authority      = 3
               no_change_allowed = 4
-              others            = 5
+              OTHERS            = 5
           ).
-      if sy-subrc <> 0.
-      endif.
-    endif.
+      IF sy-subrc <> 0.
+      ENDIF.
+    ENDIF.
 
-    if lt_status_int is not initial.
-      call function 'CRM_STATUS_CHANGE_INTERN'
-        exporting
+    IF lt_status_int IS NOT INITIAL.
+      CALL FUNCTION 'CRM_STATUS_CHANGE_INTERN'
+        EXPORTING
           objnr               = ls_status-guid
-        tables
+        TABLES
           status              = lt_status_int
-        exceptions
+        EXCEPTIONS
           object_not_found    = 1
           status_inconsistent = 2
           status_not_allowed  = 3.
-      if sy-subrc <> 0.
+      IF sy-subrc <> 0.
 * Implement suitable error handling here
-      endif.
-    endif.
+      ENDIF.
+    ENDIF.
 
-    data: lv_table type table of crm_jcds.
-    loop at iv_status_hist into lv_stat_hist.
+    DATA: lv_table TYPE TABLE OF crm_jcds.
+    LOOP AT iv_status_hist INTO lv_stat_hist.
       lv_stat_hist-objnr = ls_status-guid.
-      append lv_stat_hist to lv_table.
-      commit work.
-    endloop.
+      APPEND lv_stat_hist TO lv_table.
+    ENDLOOP.
+    MODIFY crm_jcds FROM TABLE lv_table.
 
-  endmethod.
+  ENDMETHOD.
 
 
   METHOD set_texts.

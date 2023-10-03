@@ -121,9 +121,18 @@ START-OF-SELECTION.
           error_read_doc        = 1
           error_get_attachments = 2
           error_no_target_ttype = 3
-          OTHERS                = 4.
+          error_no_id           = 4
+          error_no_guid         = 5
+          OTHERS                = 6.
       IF sy-subrc <> 0.
-        ls_output-message = 'Error reading document.'.
+        CASE sy-subrc.
+          WHEN 3.
+            CONCATENATE 'Please mapp t-type:' p_ttype 'in table ZSOLMOVE_MAPPONG' INTO ls_output-message SEPARATED BY space.
+            when 4 or 6.
+              ls_output-message = 'Please add external id/guid field for ext. system (table ZSOLMOVE_MAPPONG)'.
+          WHEN OTHERS.
+            ls_output-message = 'Error reading document.'.
+        ENDCASE.
         APPEND ls_output TO lt_output.
       ELSE.
         LOOP AT lt_messages INTO ls_message.
