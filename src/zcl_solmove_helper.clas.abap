@@ -441,7 +441,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lt_orderadm_h TYPE crmt_orderadm_h_wrkt,
           ls_customer_h TYPE crmt_customer_h_com,
           lt_status_com TYPE crmt_status_comt,
-          lv_message    TYPE tdline.
+          lv_message    TYPE tdline,
+          lv_error      TYPE char2.
 
     "check if document already created?
     CALL METHOD zcl_solmove_helper=>find_doc
@@ -707,7 +708,22 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     COMMIT WORK.
 
 *    Check if document was created?
-    lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h ).
+
+    lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h
+        EXCEPTIONS
+    document_not_found   = 1
+    error_occurred       = 2
+    document_locked      = 3
+    no_change_authority  = 4
+    no_display_authority = 5
+    no_change_allowed    = 6
+    OTHERS               = 7
+        ).
+    IF sy-subrc <> 0.
+      lv_error = sy-subrc.
+      CONCATENATE 'Document:' ls_orderadm_h-object_id 'error:' lv_error 'while reading' INTO lv_message SEPARATED BY space.
+      APPEND lv_message TO ev_message.
+    ENDIF.
 
     CONCATENATE 'Document:' ls_orderadm_h-object_id 'processed in target.' INTO lv_message SEPARATED BY space.
     APPEND lv_message TO ev_message.
@@ -864,7 +880,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lv_zer, lv_part   TYPE i,
           lv_part_conv         TYPE crmt_partner_number.
 
-    IF  iv_partner CO '0123456789'. " process only numeric partners
+    IF  iv_partner CO '1234567890 '. " process only numeric partners
       IF iv_partner(1) ='0'. "remove leading zeros
         lv_part = iv_partner.
         lv_partner_no_con = lv_part.
