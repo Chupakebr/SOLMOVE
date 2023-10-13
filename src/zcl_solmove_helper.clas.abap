@@ -864,33 +864,35 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lv_zer, lv_part   TYPE i,
           lv_part_conv         TYPE crmt_partner_number.
 
-    IF iv_partner(1) ='0'. "remove leading zeros
-      lv_part = iv_partner.
-      lv_partner_no_con = lv_part.
-      CONDENSE lv_partner_no_con.
-    ELSE.
-      lv_partner_no_con = iv_partner.
-    ENDIF.
-
-    CHECK lv_partner_no_con IS NOT INITIAL.
-
-    SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @lv_partner_no_con INTO @lv_target_partner_no.
-
-    IF lv_target_partner_no IS INITIAL.
-      "try to convert bp to 10 digets with leading zeros
-      lv_part_conv = lv_partner_no_con.
-      lv_zer = strlen( lv_part_conv ).
-      DO 10 - lv_zer TIMES.
-        CONCATENATE '0' lv_part_conv INTO lv_part_conv.
-      ENDDO.
-      SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @lv_part_conv INTO @lv_target_partner_no.
-      IF lv_target_partner_no IS NOT INITIAL.
-        lv_part = lv_target_partner_no. "now remove leading zeros.
-        ev_partner = lv_part.
-        CONDENSE ev_partner.
+    IF  iv_partner CO '0123456789'. " process only numeric partners
+      IF iv_partner(1) ='0'. "remove leading zeros
+        lv_part = iv_partner.
+        lv_partner_no_con = lv_part.
+        CONDENSE lv_partner_no_con.
+      ELSE.
+        lv_partner_no_con = iv_partner.
       ENDIF.
-    ELSE.
-      ev_partner = lv_target_partner_no.
+
+      CHECK lv_partner_no_con IS NOT INITIAL.
+
+      SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @lv_partner_no_con INTO @lv_target_partner_no.
+
+      IF lv_target_partner_no IS INITIAL.
+        "try to convert bp to 10 digets with leading zeros
+        lv_part_conv = lv_partner_no_con.
+        lv_zer = strlen( lv_part_conv ).
+        DO 10 - lv_zer TIMES.
+          CONCATENATE '0' lv_part_conv INTO lv_part_conv.
+        ENDDO.
+        SELECT SINGLE target FROM zsolmove_mapping WHERE source EQ @lv_part_conv INTO @lv_target_partner_no.
+        IF lv_target_partner_no IS NOT INITIAL.
+          lv_part = lv_target_partner_no. "now remove leading zeros.
+          ev_partner = lv_part.
+          CONDENSE ev_partner.
+        ENDIF.
+      ELSE.
+        ev_partner = lv_target_partner_no.
+      ENDIF.
     ENDIF.
   ENDMETHOD.
 
