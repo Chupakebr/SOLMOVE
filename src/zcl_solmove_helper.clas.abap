@@ -449,7 +449,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lt_status_com TYPE crmt_status_comt,
           lv_message    TYPE tdline,
           lv_error      TYPE char2,
-          lv_id         TYPE crmt_object_id_db. "new document id.
+          lv_id         TYPE crmt_object_id_db, "new document id.
+          lv_guid_c     TYPE char30.
 
     "check if document already created?
     CALL METHOD zcl_solmove_helper=>find_doc
@@ -465,8 +466,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lv_message = 'Error: Could not find created doc (check mapping).'.
       APPEND lv_message TO ev_message.
     ELSE.
+      lv_guid_c = lv_guig.
       SELECT SINGLE object_id FROM crmd_orderadm_h WHERE guid = @lv_guig INTO @lv_id.
-      CONCATENATE 'Using document:' lv_id INTO lv_message SEPARATED BY space.
+      CONCATENATE 'Using document:' lv_id lv_guid_c INTO lv_message SEPARATED BY space.
       APPEND lv_message TO ev_message.
     ENDIF.
 
@@ -484,11 +486,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         error_occurred                = 2
         OTHERS                        = 3 ).
       IF sy-subrc <> 0.
-        lv_message = 'Error: Could not read created Document.'.
-      ELSE.
-        lv_message = 'Document found, updating.'.
+        lv_message = 'Error: Could not initialise cl_ags_crm_1o_api.'.
+        APPEND lv_message TO ev_message.
       ENDIF.
-      APPEND lv_message TO ev_message.
     ENDIF.
 
     "Create document
@@ -502,8 +502,11 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         ).
       IF sy-subrc <> 0.
         lv_message = 'Error: Could not ceate new doc.'.
-        APPEND lv_message TO ev_message.
+      ELSE.
+        lv_guid_c = lo_cd->get_guid( ).
+        CONCATENATE 'OK: New document created:' lv_guid_c INTO lv_message SEPARATED BY space.
       ENDIF.
+      APPEND lv_message TO ev_message.
     ENDIF.
 
     IF lo_cd IS NOT BOUND.
@@ -524,12 +527,12 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     IF sy-subrc <> 0.
       CASE sy-subrc.
         WHEN 3.
-          lv_message = 'Error updating doc: document locked.'.
+          lv_message = 'Error: updating doc: document locked.'.
         WHEN 6.
-          CONCATENATE 'Document:' lv_id 'closed, could not be updated. Skiping.' INTO lv_message SEPARATED BY space.
+          CONCATENATE 'OK: Document:' lv_id 'closed, could not be updated. Skiping.' INTO lv_message SEPARATED BY space.
         WHEN OTHERS.
           lv_error = sy-subrc.
-          CONCATENATE 'Error updating doc:' lv_id ':' lv_error INTO lv_message SEPARATED BY space.
+          CONCATENATE 'Error: updating doc:' lv_id ':' lv_error INTO lv_message SEPARATED BY space.
       ENDCASE.
       APPEND lv_message TO ev_message.
       RETURN.
@@ -620,7 +623,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       "add doc context
       CALL METHOD zcl_solmove_helper=>set_context
         EXPORTING
-          iv_guid     = lo_cd->get_guid( )
+          iv_guid     = ls_orderadm_h-guid
           et_context  = iv_documentprops-context
           iv_doc_guid = iv_documentprops-object_guid
           iv_cycle    = iv_documentprops-cycle.
@@ -660,7 +663,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           error_customer_header = 1
           OTHERS                = 2.
       IF sy-subrc <> 0.
-        lv_message = 'Error: Could not set document webui fields'.
+        lv_message = 'Error: Could not set document webui fields.'.
         APPEND lv_message TO ev_message.
       ENDIF.
     ENDIF.
@@ -676,7 +679,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         iv_1o_api   = lo_cd
         iv_doc_guid = iv_documentprops-object_guid
         lt_docs     = iv_documentprops-doc_flow
-        iv_guid     = lo_cd->get_guid( ).
+        iv_guid     = ls_orderadm_h-guid.
 
     "set texts
     IF iv_documentprops-text_all IS NOT INITIAL.
