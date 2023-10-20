@@ -15,24 +15,24 @@ public section.
       !IT_CATEGORIES type CRMT_SUBJECT_WRK
     changing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API .
-  class-methods SET_SLA
-    importing
-      !IV_GUID type CRMT_OBJECT_GUID
-    exporting
-      !ET_SLA_DB type ZSLA_SRCL_TT .
   class-methods GET_APPROVAL
     importing
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
       !ET_APPROVAL type CRMT_APPROVAL_WRK
       !ET_APPROVAL_DB type ZAPPROVAL_DB .
+  class-methods GET_SLA
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+    exporting
+      !ET_SLA_DB type ZSLA_SRCL_TT .
   class-methods GET_TEST_DATA
     importing
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
       !ET_APPROVAL type CRMT_APPROVAL_WRK
       !ET_APPROVAL_DB type ZAPPROVAL_DB .
-  class-methods GET_SLA
+  class-methods SET_SLA
     importing
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
@@ -68,7 +68,7 @@ public section.
       !LT_DOCS type CRMT_DOC_FLOW_WRKT .
   class-methods GET_TEXTS
     importing
-      !IV_GUID type CRMT_OBJECT_GUID
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
       !ET_TEXT_ALL type COMT_TEXT_TEXTDATA_T
       !ET_TEXTDATA_GEN type CRMT_TEXT_GEN_EXT_TAB .
@@ -86,10 +86,13 @@ public section.
       !IV_GUID type CRMT_OBJECT_GUID .
   class-methods SET_TEXTS
     importing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
       !IV_GUID type CRMT_OBJECT_GUID
       !IV_TEXT_PROC type COMT_TEXT_DET_PROCEDURE
       !IT_TEXTDATA type COMT_TEXT_TEXTDATA_T
-      !IT_TEXTDATA_GEN type CRMT_TEXT_GEN_EXT_TAB .
+      !IT_TEXTDATA_GEN type CRMT_TEXT_GEN_EXT_TAB
+    exporting
+      !EV_MESSAGE type TDLINE .
   class-methods CREATE_BP
     importing
       !IV_BP_DATA type ZBP_DATA
@@ -198,6 +201,7 @@ public section.
       !IV_GUID type CRMT_OBJECT_GUID
       !IV_OBJECT_TYPE type SIBFTYPEID
       !IV_ATTACH_LIST type ZATTACHMENT_TT
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
       !EV_MESSAGE type TDLINE .
   class-methods SET_SOLDOC
@@ -516,7 +520,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-
     "set description
     lo_cd->set_short_text( EXPORTING iv_short_text = iv_documentprops-description ).
     IF sy-subrc <> 0.
@@ -562,14 +565,22 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     " add attachments
     IF iv_documentprops-attach_list IS NOT INITIAL.
-      DATA: lt_object_type TYPE sibftypeid.
-      lt_object_type = ls_orderadm_h-object_type.
+      CLEAR lv_message.
+      "convert t-type
+      DATA: lv_t_type TYPE sibftypeid.
+      lv_t_type = ls_orderadm_h-object_type.
 
       CALL METHOD zcl_solmove_helper=>set_attachments
         EXPORTING
+          iv_1o_api      = lo_cd
           iv_guid        = ls_orderadm_h-guid
-          iv_object_type = lt_object_type
-          iv_attach_list = iv_documentprops-attach_list.
+          iv_object_type = lv_t_type
+          iv_attach_list = iv_documentprops-attach_list
+        IMPORTING
+          ev_message     = lv_message.
+      IF lv_message IS NOT INITIAL.
+        APPEND lv_message TO ev_message.
+      ENDIF.
     ENDIF.
 
     "add ibase
@@ -654,15 +665,20 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     "set texts
     IF iv_documentprops-text_all IS NOT INITIAL.
+      CLEAR lv_message.
       CALL METHOD zcl_solmove_helper=>set_texts
         EXPORTING
           iv_guid         = ls_orderadm_h-guid
           iv_text_proc    = lo_cd->av_text_proc
           it_textdata     = iv_documentprops-text_all
-          it_textdata_gen = iv_documentprops-text_gen.
-
+          it_textdata_gen = iv_documentprops-text_gen
+          iv_1o_api       = lo_cd
+        IMPORTING
+          ev_message      = lv_message.
       IF sy-subrc <> 0.
         lv_message = 'Error: Could not set texts'.
+        APPEND lv_message TO ev_message.
+      ELSEIF lv_message IS NOT INITIAL.
         APPEND lv_message TO ev_message.
       ENDIF.
     ENDIF.
@@ -915,75 +931,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
   METHOD get_categories.
 
-
-** low level function for debugging: crm_erms_cat_ca_read + crm_erms_cat_as_read.
-*
-*    TYPES :
-*      tt_category TYPE  TABLE  OF  REF  TO if_crm_erms_catego_category.
-*
-*    DATA :
-*      li_aspect     TYPE  REF  TO if_crm_erms_catego_aspect,
-*      li_category   TYPE  REF  TO if_crm_erms_catego_category,
-*      lr_categories TYPE  REF  TO data,
-*      ls_cat_lang   TYPE crmt_erms_cat_ca_lang.
-*
-*    FIELD-SYMBOLS:
-*      <ft_category> TYPE tt_category,
-*      <fi_category> LIKE li_category.
-*
-** Ensure valid result.
-*    REFRESH rt_result[].
-*
-** Get Assigned Categorys.
-*    CALL METHOD cl_crm_ml_category_util=>get_categoryfirst
-*      EXPORTING
-*        iv_ref_guid     = iv_guid
-*        iv_ref_kind     = 'A'
-*        iv_catalog_type = iv_catalog_type
-*      IMPORTING
-*        er_aspect       = li_aspect
-*        er_category     = li_category.
-*
-*    CHECK li_aspect IS  BOUND  AND li_category IS  BOUND .
-*
-** Get All Parent Nodes.
-*    CALL METHOD cl_crm_ml_category_util=>get_cat_pars_all
-*      EXPORTING
-*        ir_aspect     = li_aspect
-*        ir_category   = li_category
-*      IMPORTING
-*        er_categories = lr_categories.
-*
-*    CHECK lr_categories IS  BOUND .
-*
-*    ASSIGN lr_categories->* TO <ft_category>.
-*
-** Don't forget our assigned category.
-*    INSERT li_category INTO <ft_category> INDEX 1.
-*
-*    LOOP  AT <ft_category> ASSIGNING <fi_category>.
-*
-** Get Category Details.
-*      CALL METHOD <fi_category>->get_details
-** EXPORTING
-** iv_auth_check = ''
-*        IMPORTING
-**         ev_cat      = ls_cat
-*          ev_cat_lang = ls_cat_lang.
-*
-** Ensure that description is filled.
-*      IF ls_cat_lang-cat_desc IS  INITIAL .
-*        ls_cat_lang-cat_desc = ls_cat_lang-cat_labl.
-*      ENDIF .
-*
-*      IF ls_cat_lang-cat_desc IS  INITIAL .
-*        ls_cat_lang-cat_desc = ls_cat_lang-cat-cat_id.
-*      ENDIF .
-*
-** Transfer Result
-*      INSERT ls_cat_lang INTO rt_result[] INDEX 1.
-*
-*    ENDLOOP .
     DATA: lv_cat    TYPE crmt_subject_wrk.
 
     CALL METHOD iv_1o_api->get_subject
@@ -1180,7 +1127,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     "get texts
     CALL METHOD zcl_solmove_helper=>get_texts
       EXPORTING
-        iv_guid         = iv_guid
+        iv_1o_api  = lo_api_object
       IMPORTING
         et_text_all     = lt_doc_properties-text_all
         et_textdata_gen = lt_doc_properties-text_gen.
@@ -1486,23 +1433,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     DATA: lo_api_object TYPE REF TO cl_ags_crm_1o_api,
           lt_text_gen   TYPE crmt_text_gen_ext_tab.
 
-    CALL METHOD cl_ags_crm_1o_api=>get_instance
-      EXPORTING
-        iv_language                   = sy-langu
-        iv_header_guid                = iv_guid
-        iv_process_mode               = cl_ags_crm_1o_api=>ac_mode-display
-      IMPORTING
-        eo_instance                   = lo_api_object
-      EXCEPTIONS
-        invalid_parameter_combination = 1
-        error_occurred                = 2
-        OTHERS                        = 3.
-    IF sy-subrc <> 0.
-      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
-    ENDIF.
 
-    lo_api_object->get_texts(
+    iv_1o_api->get_texts(
       IMPORTING
             et_text_all = et_text_all
             et_text_gen = et_textdata_gen ).
@@ -2111,64 +2043,72 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
-  method set_attachments.
+  METHOD set_attachments.
 
-    data: ls_attachment       type  zattachment,
-          ls_bo               type  sibflporb,
-          lt_file_err         type  skwf_error,
-          ls_loio             type  skwf_io,
-          ls_phio             type  skwf_io,
-          lt_attachment_props type  sdokproptys,
-          ls_attachment_props like  line of lt_attachment_props.
+    DATA: ls_attachment       TYPE  zattachment,
+          ls_bo               TYPE  sibflporb,
+          lt_file_err         TYPE  skwf_error,
+          ls_loio             TYPE  skwf_io,
+          ls_phio             TYPE  skwf_io,
+          lt_attachment_props TYPE  sdokproptys,
+          ls_attachment_props LIKE  LINE OF lt_attachment_props,
+          lt_attachment_list  TYPE ags_t_crm_attachment.
 
-    ls_bo-instid = iv_guid.
-    ls_bo-typeid = IV_OBJECT_TYPE.
-    ls_bo-catid = 'BO'. " ! Change
+    "first check if there are attachments (can be enhanced)
+    iv_1o_api->get_attachment_list( IMPORTING et_attach_list = lt_attachment_list ).
+    IF lt_attachment_list IS NOT INITIAL.
 
-    loop at iv_attach_list into ls_attachment.
+      ls_bo-instid = iv_guid.
+      ls_bo-typeid = iv_object_type.
+      ls_bo-catid = 'BO'. " ! Change
 
-      clear: lt_file_err, lt_attachment_props, ls_attachment_props.
+      LOOP AT iv_attach_list INTO ls_attachment.
 
-      ls_attachment_props-name = 'FILE_NAME'.
-      ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
-      append ls_attachment_props to lt_attachment_props.
+        CLEAR: lt_file_err, lt_attachment_props, ls_attachment_props.
 
-      ls_attachment_props-name = 'TECHN_FILE_NAME'.
-      ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
-      append ls_attachment_props to lt_attachment_props.
+        ls_attachment_props-name = 'FILE_NAME'.
+        ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
+        APPEND ls_attachment_props TO lt_attachment_props.
 
-      ls_attachment_props-name = 'DESCRIPTION'.
-      ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
-      append ls_attachment_props to lt_attachment_props.
+        ls_attachment_props-name = 'TECHN_FILE_NAME'.
+        ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
+        APPEND ls_attachment_props TO lt_attachment_props.
 
-      ls_attachment_props-name = 'KW_RELATIVE_URL'.
-      ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
-      append ls_attachment_props to lt_attachment_props.
+        ls_attachment_props-name = 'DESCRIPTION'.
+        ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
+        APPEND ls_attachment_props TO lt_attachment_props.
 
-      ls_attachment_props-name = 'LANGUAGE'.
-      ls_attachment_props-value = sy-langu.
-      append ls_attachment_props to lt_attachment_props.
+        ls_attachment_props-name = 'KW_RELATIVE_URL'.
+        ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
+        APPEND ls_attachment_props TO lt_attachment_props.
+
+        ls_attachment_props-name = 'LANGUAGE'.
+        ls_attachment_props-value = sy-langu.
+        APPEND ls_attachment_props TO lt_attachment_props.
 
 
-      call method cl_crm_documents=>create_with_table
-        exporting
-          business_object     = ls_bo
-          properties          = lt_attachment_props
-          file_access_info    = ls_attachment-file_access_info
-          file_content_binary = ls_attachment-file_content_binary
-*         file_content_ascii  = ls_attachment-file_content_ascii
-        importing
-          loio                = ls_loio
-          phio                = ls_phio
-          error               = lt_file_err.
+        CALL METHOD cl_crm_documents=>create_with_table
+          EXPORTING
+            business_object     = ls_bo
+            properties          = lt_attachment_props
+            file_access_info    = ls_attachment-file_access_info
+            file_content_binary = ls_attachment-file_content_binary
+*           file_content_ascii  = ls_attachment-file_content_ascii
+          IMPORTING
+            loio                = ls_loio
+            phio                = ls_phio
+            error               = lt_file_err.
 
-      if lt_file_err is not initial.
-        concatenate 'Attachment creation failed,' lt_file_err-no lt_file_err-v1 into ev_message separated by space.
-        continue.
-      endif.
-    endloop.
+        IF lt_file_err IS NOT INITIAL.
+          CONCATENATE 'Attachment creation failed,' lt_file_err-no lt_file_err-v1 INTO ev_message SEPARATED BY space.
+          CONTINUE.
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+      ev_message = 'Attachment exist. Skipping attachments.'.
+    ENDIF.
 
-  endmethod.
+  ENDMETHOD.
 
 
   METHOD set_categories.
@@ -2509,58 +2449,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   METHOD set_soldoc.
-*
-*    data:
-*      lv_smud_occ type smud_context_occ,
-*      lv_log_handle TYPE balloghndl,
-*      lv_root_occ type smud_guid22.
-*
-*    DATA: lo_api_object       TYPE REF TO cl_ags_crm_1o_api,
-*          iv_smud_t           TYPE SMUD_T_GUID22.
-*
-*
-*    CALL METHOD cl_ags_crm_1o_api=>get_instance
-*      EXPORTING
-*        iv_language                   = sy-langu
-*        iv_header_guid                = iv_guid
-*        iv_process_mode               = cl_ags_crm_1o_api=>ac_mode-display
-*      IMPORTING
-*        eo_instance                   = lo_api_object
-*      EXCEPTIONS
-*        invalid_parameter_combination = 1
-*        error_occurred                = 2
-*        OTHERS                        = 3.
-*    IF sy-subrc <> 0.
-*      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-*        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
-*    ENDIF.
-*
-*    "set smud context
-*    loop at iv_smud_t into data(ls_occ_id).
-*      lv_smud_occ(22) = ls_occ_id.
-*
-*      " get root occ
-*      select single root_occ from smud_node where occ_id = @ls_occ_id into @lv_root_occ.
-*
-*      lo_api_object->set_smud_context_occ(
-*              exporting
-*                iv_smud_context_occ = conv #( lv_smud_occ && lv_root_occ )
-*                iv_sbom_type        = cl_ags_crm_smud_util=>cs_sbom_type-cd
-*              exceptions
-*                invalid_parameters  = 1
-*                others              = 2 ).
-*
-*      lo_api_object->save( CHANGING cv_log_handle = lv_log_handle ).
-*
-*      if sy-subrc <> 0.
-*      endif.
-*
-*    endloop.
-*
-*        "get occ_ids debug
-*    lo_api_object->get_smud_occurrences(
-*      IMPORTING
-*        et_smud_occurrences = data(lt_smud_occurrences) ).
     DATA:
       lv_smud_context     TYPE        smud_context_occ,
       ls_parameters       TYPE        ags_mk_s_param,
@@ -2587,7 +2475,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           iv_line       = lv_line.
 
     ENDLOOP.
-
   ENDMETHOD.
 
 
@@ -2644,11 +2531,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           ls_status_int-inact = space.
           ls_status_int-stat  = lv_status_c.
           APPEND ls_status_int TO lt_status_int.
-
-*          ls_status_int-inact = 'X'.
-*          ls_status_int-stat  = ls_status_com-status.
-*          append ls_status_int to lt_status_int.
-
         ENDIF.
       ENDIF.
     ENDLOOP.
@@ -2700,151 +2582,158 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     INCLUDE crm_object_kinds_con.
 
     DATA lt_textdata TYPE STANDARD TABLE OF comt_text_textdata.
-*    DATA ls_textdata TYPE comt_text_textdata.
-
     DATA lt_text_com TYPE crmt_text_comt.
     DATA ls_text_com TYPE crmt_text_com.
-
-*    DATA ls_textdata_gen TYPE crmt_text_gen_ext.
     DATA lr_text_gen TYPE REF TO crmt_text_gen_ext_tab.
     DATA lt_textdata_gen TYPE crmt_text_gen_ext_tab.
     DATA lo_text_gen_util TYPE REF TO cl_crm_text_gen_txtformat_util.
-*    DATA lo_component TYPE REF TO if_crm_text_format_conversion.
     DATA lt_extension2 TYPE crmt_extension2_comt.
     DATA ls_extension2 TYPE crmt_extension2_com.
-
     DATA lv_text_html TYPE crm_text_gen_content.
     DATA lt_text_gen_com TYPE crmt_text_gen_ext_tab.
-
     FIELD-SYMBOLS:  <lt_text_gen> TYPE crmt_text_gen_ext_tab.
 
-    "Merge text lines of ITF texts
-    LOOP AT it_textdata INTO DATA(ls_textdata) GROUP BY ( tdid = ls_textdata-stxh-tdid ) ASCENDING ASSIGNING FIELD-SYMBOL(<text_grp>).
-      CLEAR lt_textdata.
+    "First check if text already set (this chek can be removed or enhanced)
+    DATA:
+      lt_text_all	    TYPE comt_text_textdata_t.
 
-      " Collect all text ids with the same target text id
-      LOOP AT GROUP <text_grp> ASSIGNING FIELD-SYMBOL(<text>).
-        " Change target TDID with source TDID for building the text log
-        ls_textdata           = <text>.
-        DATA(lv_target_tdid)    = <text>-stxh-tdid.
-        ls_textdata-stxh-tdid = <text>-stxh-tdrefid.
-        APPEND ls_textdata TO lt_textdata.
-      ENDLOOP.
+    iv_1o_api->get_texts(
+      IMPORTING
+            et_text_all = lt_text_all
+            et_text_gen = lt_textdata_gen ).
 
-      cl_im_ai_crm_copy_badi=>crm_orderh_text_write_api(
-        EXPORTING
-          iv_procedure = iv_text_proc
-        CHANGING
-          ct_textdata  = lt_textdata ).
+    IF lt_text_all IS INITIAL AND lt_textdata_gen IS INITIAL.
+      clear: lt_textdata_gen, lt_text_all.
 
-      LOOP AT lt_textdata INTO ls_textdata.
-        CLEAR ls_text_com.
-        MOVE-CORRESPONDING ls_textdata-stxh TO ls_text_com.
+      "Merge text lines of ITF texts
+      LOOP AT it_textdata INTO DATA(ls_textdata) GROUP BY ( tdid = ls_textdata-stxh-tdid ) ASCENDING ASSIGNING FIELD-SYMBOL(<text_grp>).
+        CLEAR lt_textdata.
 
-        ls_text_com-ref_guid    = iv_guid.
-        ls_text_com-ref_kind    = gc_object_kind-orderadm_h.
-        ls_text_com-tdid        = lv_target_tdid.
-        ls_text_com-ext-tdspras = sy-langu.
-        ls_text_com-lines       = ls_textdata-lines.
-        ls_text_com-mode        = gc_mode-change.
-        INSERT ls_text_com INTO TABLE lt_text_com.
-      ENDLOOP.
-
-    ENDLOOP.
-
-    "Merge text lines of HTML texts
-    LOOP AT it_textdata_gen INTO DATA(ls_textdata_gen) GROUP BY ( text_id = ls_textdata_gen-text_id ) ASCENDING ASSIGNING FIELD-SYMBOL(<text_gen_grp>).
-      CLEAR lt_textdata_gen.
-
-      " Collect all text ids with the same target text id
-      LOOP AT GROUP <text_gen_grp> ASSIGNING FIELD-SYMBOL(<text_gen>).
-        " Change target TDID with source TDID for building the text log
-        ls_textdata_gen         = <text_gen>.
-        lv_target_tdid          = <text_gen>-text_id.
-        ls_textdata_gen-text_id = <text_gen>-stx_ref_text_id.
-        CLEAR ls_textdata_gen-stx_ref_text_id.
-        APPEND ls_textdata_gen TO lt_textdata_gen.
-      ENDLOOP.
-
-      DATA(ls_text_gen_com) = merge_html_text_lines( iv_procedure    = iv_text_proc
-                                                     it_textdata_gen = lt_textdata_gen ).
-
-      ls_text_gen_com-rel_object_guid = iv_guid.
-      ls_text_gen_com-text_id         = lv_target_tdid. "Target TDID
-
-      INSERT ls_text_gen_com INTO TABLE lt_text_gen_com.
-
-    ENDLOOP.
-
-    " Maintain ITF text
-    IF lt_text_com IS NOT INITIAL.
-
-      DATA(ls_input_field_name) = VALUE crmt_input_field_names( fieldname = 'LINES' ).
-      DATA(lt_input_field_names) = VALUE crmt_input_field_names_tab( ( ls_input_field_name ) ).
-
-      "Update the text
-      CALL FUNCTION 'CRM_TEXT_MAINTAIN_OW'
-        EXPORTING
-          it_text                  = lt_text_com
-          iv_object_guid           = iv_guid
-          iv_object_kind           = gc_object_kind-orderadm_h
-          iv_textobject            = 'CRM_ORDERH'
-        CHANGING
-          ct_input_field_names     = lt_input_field_names
-        EXCEPTIONS
-          object_kind_unknown      = 0
-          read_error_object_buffer = 0
-          OTHERS                   = 0.
-
-    ENDIF.
-
-
-    " Maintain HTML text
-    IF lt_text_gen_com IS NOT INITIAL.
-      " Create a Data reference to the structure of the Generic Table and
-      " assign it to the Extension2 data component
-      CREATE DATA lr_text_gen TYPE crmt_text_gen_ext_tab.
-      ls_extension2-data = lr_text_gen.
-
-      " De-reference the Data reference
-      ASSIGN lr_text_gen->* TO <lt_text_gen>.
-
-      " Now fill in the data into the Extension2 table.
-      ls_extension2-object = if_crm_text_gen_constants=>gc_object_name.
-      ls_extension2-ref_guid =  iv_guid.
-      ls_extension2-ref_kind = gc_object_kind-orderadm_h.
-      INSERT ls_extension2 INTO TABLE lt_extension2.
-
-      <lt_text_gen> = lt_text_gen_com.
-
-      cl_crm_component=>get_instance(
-        EXPORTING
-          iv_object_name = if_crm_text_gen_constants=>gc_object_name
-        IMPORTING
-          ev_instance    = DATA(lo_component) ).
-
-      IF lo_component IS NOT INITIAL.
-        LOOP AT lt_extension2 INTO ls_extension2.
-          ASSIGN ls_extension2-data->* TO FIELD-SYMBOL(<lt_data>).
-
-          DATA(lt_input_fields) = VALUE crmt_input_field_tab( ( ref_guid    = iv_guid
-                                                                ref_kind    = gc_object_kind-orderadm_h
-                                                                objectname  = if_crm_text_gen_constants=>gc_object_name
-                                                                field_names = VALUE crmt_input_field_names_tab( ( fieldname = 'TEXT_CONTENT' ) )
-                                                              ) ).
-          "maintain HTML text
-          CALL METHOD lo_component->maintain
-            EXPORTING
-              iv_ref_kind      = 'A'
-              iv_ref_guid      = iv_guid
-              is_data          = <lt_data>
-              iv_external_call = abap_true
-            CHANGING
-              ct_input_fields  = lt_input_fields.
-
-          CLEAR: lt_input_fields.
+        " Collect all text ids with the same target text id
+        LOOP AT GROUP <text_grp> ASSIGNING FIELD-SYMBOL(<text>).
+          " Change target TDID with source TDID for building the text log
+          ls_textdata           = <text>.
+          DATA(lv_target_tdid)    = <text>-stxh-tdid.
+          ls_textdata-stxh-tdid = <text>-stxh-tdrefid.
+          APPEND ls_textdata TO lt_textdata.
         ENDLOOP.
+
+        cl_im_ai_crm_copy_badi=>crm_orderh_text_write_api(
+          EXPORTING
+            iv_procedure = iv_text_proc
+          CHANGING
+            ct_textdata  = lt_textdata ).
+
+        LOOP AT lt_textdata INTO ls_textdata.
+          CLEAR ls_text_com.
+          MOVE-CORRESPONDING ls_textdata-stxh TO ls_text_com.
+
+          ls_text_com-ref_guid    = iv_guid.
+          ls_text_com-ref_kind    = gc_object_kind-orderadm_h.
+          ls_text_com-tdid        = lv_target_tdid.
+          ls_text_com-ext-tdspras = sy-langu.
+          ls_text_com-lines       = ls_textdata-lines.
+          ls_text_com-mode        = gc_mode-change.
+          INSERT ls_text_com INTO TABLE lt_text_com.
+        ENDLOOP.
+
+      ENDLOOP.
+
+      "Merge text lines of HTML texts
+      LOOP AT it_textdata_gen INTO DATA(ls_textdata_gen) GROUP BY ( text_id = ls_textdata_gen-text_id ) ASCENDING ASSIGNING FIELD-SYMBOL(<text_gen_grp>).
+        CLEAR lt_textdata_gen.
+
+        " Collect all text ids with the same target text id
+        LOOP AT GROUP <text_gen_grp> ASSIGNING FIELD-SYMBOL(<text_gen>).
+          " Change target TDID with source TDID for building the text log
+          ls_textdata_gen         = <text_gen>.
+          lv_target_tdid          = <text_gen>-text_id.
+          ls_textdata_gen-text_id = <text_gen>-stx_ref_text_id.
+          CLEAR ls_textdata_gen-stx_ref_text_id.
+          APPEND ls_textdata_gen TO lt_textdata_gen.
+        ENDLOOP.
+
+        DATA(ls_text_gen_com) = merge_html_text_lines( iv_procedure    = iv_text_proc
+                                                       it_textdata_gen = lt_textdata_gen ).
+
+        ls_text_gen_com-rel_object_guid = iv_guid.
+        ls_text_gen_com-text_id         = lv_target_tdid. "Target TDID
+
+        INSERT ls_text_gen_com INTO TABLE lt_text_gen_com.
+
+      ENDLOOP.
+
+      " Maintain ITF text
+      IF lt_text_com IS NOT INITIAL.
+
+        DATA(ls_input_field_name) = VALUE crmt_input_field_names( fieldname = 'LINES' ).
+        DATA(lt_input_field_names) = VALUE crmt_input_field_names_tab( ( ls_input_field_name ) ).
+
+        "Update the text
+        CALL FUNCTION 'CRM_TEXT_MAINTAIN_OW'
+          EXPORTING
+            it_text                  = lt_text_com
+            iv_object_guid           = iv_guid
+            iv_object_kind           = gc_object_kind-orderadm_h
+            iv_textobject            = 'CRM_ORDERH'
+          CHANGING
+            ct_input_field_names     = lt_input_field_names
+          EXCEPTIONS
+            object_kind_unknown      = 0
+            read_error_object_buffer = 0
+            OTHERS                   = 0.
+
       ENDIF.
+
+      " Maintain HTML text
+      IF lt_text_gen_com IS NOT INITIAL.
+        " Create a Data reference to the structure of the Generic Table and
+        " assign it to the Extension2 data component
+        CREATE DATA lr_text_gen TYPE crmt_text_gen_ext_tab.
+        ls_extension2-data = lr_text_gen.
+
+        " De-reference the Data reference
+        ASSIGN lr_text_gen->* TO <lt_text_gen>.
+
+        " Now fill in the data into the Extension2 table.
+        ls_extension2-object = if_crm_text_gen_constants=>gc_object_name.
+        ls_extension2-ref_guid =  iv_guid.
+        ls_extension2-ref_kind = gc_object_kind-orderadm_h.
+        INSERT ls_extension2 INTO TABLE lt_extension2.
+
+        <lt_text_gen> = lt_text_gen_com.
+
+        cl_crm_component=>get_instance(
+          EXPORTING
+            iv_object_name = if_crm_text_gen_constants=>gc_object_name
+          IMPORTING
+            ev_instance    = DATA(lo_component) ).
+
+        IF lo_component IS NOT INITIAL.
+          LOOP AT lt_extension2 INTO ls_extension2.
+            ASSIGN ls_extension2-data->* TO FIELD-SYMBOL(<lt_data>).
+
+            DATA(lt_input_fields) = VALUE crmt_input_field_tab( ( ref_guid    = iv_guid
+                                                                  ref_kind    = gc_object_kind-orderadm_h
+                                                                  objectname  = if_crm_text_gen_constants=>gc_object_name
+                                                                  field_names = VALUE crmt_input_field_names_tab( ( fieldname = 'TEXT_CONTENT' ) )
+                                                                ) ).
+            "maintain HTML text
+            CALL METHOD lo_component->maintain
+              EXPORTING
+                iv_ref_kind      = 'A'
+                iv_ref_guid      = iv_guid
+                is_data          = <lt_data>
+                iv_external_call = abap_true
+              CHANGING
+                ct_input_fields  = lt_input_fields.
+
+            CLEAR: lt_input_fields.
+          ENDLOOP.
+        ENDIF.
+      ENDIF.
+      else.
+        EV_MESSAGE = 'Texts exist, skipping seting texts.'.
     ENDIF.
 
   ENDMETHOD.
