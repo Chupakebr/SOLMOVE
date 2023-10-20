@@ -83,6 +83,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_SOLDOC</KEY>
+     <ENTRY>Soldoc content linking</ENTRY>
+     <LENGTH>30</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_STATUS</KEY>
      <ENTRY>Status change</ENTRY>
      <LENGTH>21</LENGTH>

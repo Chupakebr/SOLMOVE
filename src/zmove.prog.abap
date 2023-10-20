@@ -44,6 +44,7 @@ PARAMETERS p_ttype  TYPE crmt_process_type_db DEFAULT 'S1MJ'.
 PARAMETERS p_update AS CHECKBOX DEFAULT 'X'.
 PARAMETERS p_status AS CHECKBOX DEFAULT ''. "! if document in closed status no updates are posible.
 PARAMETERS p_texts  AS CHECKBOX DEFAULT ''.
+PARAMETERS p_soldoc AS CHECKBOX DEFAULT ''.
 PARAMETERS p_attach AS CHECKBOX DEFAULT ''.
 PARAMETERS p_test   AS CHECKBOX DEFAULT 'X'.
 
@@ -128,8 +129,8 @@ START-OF-SELECTION.
         CASE sy-subrc.
           WHEN 3.
             CONCATENATE 'Please mapp t-type:' p_ttype 'in table ZSOLMOVE_MAPPONG' INTO ls_output-message SEPARATED BY space.
-            when 4 or 6.
-              ls_output-message = 'Please add external id/guid field for ext. system (table ZSOLMOVE_MAPPONG)'.
+          WHEN 4 OR 6.
+            ls_output-message = 'Please add external id/guid field for ext. system (table ZSOLMOVE_MAPPONG)'.
           WHEN OTHERS.
             ls_output-message = 'Error reading document.'.
         ENDCASE.
@@ -151,6 +152,9 @@ START-OF-SELECTION.
         ENDIF.
         IF p_attach IS INITIAL.
           CLEAR ls_doc_properties-attach_list.
+        ENDIF.
+        IF p_soldoc IS INITIAL.
+          CLEAR ls_doc_properties-occ_ids.
         ENDIF.
 
         IF p_test IS INITIAL.
