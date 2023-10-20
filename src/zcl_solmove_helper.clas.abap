@@ -448,7 +448,8 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           ls_customer_h TYPE crmt_customer_h_com,
           lt_status_com TYPE crmt_status_comt,
           lv_message    TYPE tdline,
-          lv_error      TYPE char2.
+          lv_error      TYPE char2,
+          lv_id         TYPE crmt_object_id_db. "new document id.
 
     "check if document already created?
     CALL METHOD zcl_solmove_helper=>find_doc
@@ -462,6 +463,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         OTHERS        = 2.
     IF sy-subrc <> 0.
       lv_message = 'Error: Could not find created doc (check mapping).'.
+      APPEND lv_message TO ev_message.
+    ELSE.
+      SELECT SINGLE object_id FROM crmd_orderadm_h WHERE guid = @lv_guig INTO @lv_id.
+      CONCATENATE 'Using document:' lv_id INTO lv_message SEPARATED BY space.
       APPEND lv_message TO ev_message.
     ENDIF.
 
@@ -521,10 +526,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         WHEN 3.
           lv_message = 'Error updating doc: document locked.'.
         WHEN 6.
-          lv_message = 'Error updating doc: document closed. No change allowed'.
+          CONCATENATE 'Document:' lv_id 'closed, could not be updated. Skiping.' INTO lv_message SEPARATED BY space.
         WHEN OTHERS.
           lv_error = sy-subrc.
-          CONCATENATE 'Error updating doc:' lv_error INTO lv_message SEPARATED BY space.
+          CONCATENATE 'Error updating doc:' lv_id ':' lv_error INTO lv_message SEPARATED BY space.
       ENDCASE.
       APPEND lv_message TO ev_message.
       RETURN.
