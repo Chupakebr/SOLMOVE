@@ -507,14 +507,22 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     "get guid of the created document
     lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h
        EXCEPTIONS
-            document_locked             = 3
-            OTHERS                      = 7 ).
+                document_not_found   = 1
+                error_occurred       = 2
+                document_locked      = 3
+                no_change_authority  = 4
+                no_display_authority = 5
+                no_change_allowed    = 6
+                OTHERS               = 7 ).
     IF sy-subrc <> 0.
       CASE sy-subrc.
         WHEN 3.
-          lv_message = 'Error: document locked.'.
+          lv_message = 'Error updating doc: document locked.'.
+        WHEN 6.
+          lv_message = 'Error updating doc: document closed. No change allowed'.
         WHEN OTHERS.
-          lv_message = 'Error: setting header.'.
+          lv_error = sy-subrc.
+          CONCATENATE 'Error updating doc:' lv_error INTO lv_message SEPARATED BY space.
       ENDCASE.
       APPEND lv_message TO ev_message.
       RETURN.
@@ -737,7 +745,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         ).
     IF sy-subrc <> 0.
       lv_error = sy-subrc.
-      CONCATENATE 'Document:' ls_orderadm_h-object_id 'error:' lv_error 'while reading' INTO lv_message SEPARATED BY space.
+      CONCATENATE 'Document:' ls_orderadm_h-object_id 'error:' lv_error 'while reading after update' INTO lv_message SEPARATED BY space.
       APPEND lv_message TO ev_message.
     ENDIF.
 
