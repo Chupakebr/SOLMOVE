@@ -32,10 +32,9 @@ public section.
     exporting
       !ET_APPROVAL type CRMT_APPROVAL_WRK
       !ET_APPROVAL_DB type ZAPPROVAL_DB .
-  class-methods SET_SLA
+  class-methods SET_SLA_DB
     importing
       !IV_GUID type CRMT_OBJECT_GUID
-    exporting
       !ET_SLA_DB type ZSLA_SRCL_TT .
   class-methods SET_APPROVAL
     importing
@@ -137,7 +136,7 @@ public section.
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
       !EV_TRANSPORTS type ZTRANSPORTS_TT .
-  class-methods SET_TR
+  class-methods SET_TR_DB
     importing
       !IV_GUID type CRMT_OBJECT_GUID
       !IV_TRANSPORTS type ZTRANSPORTS_TT
@@ -210,10 +209,13 @@ public section.
       !IT_OCC_IDS type ZSMUD_TT
     changing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API .
+  class-methods SET_JCDS_DB
+    importing
+      !IV_STATUS_HIST type ZSTATUS_TT_HISTORY
+      !IV_GUID type CRMT_OBJECT_GUID .
   class-methods SET_STATUS
     importing
       !IV_STATUS type ZSTATUS_TT
-      !IV_STATUS_HIST type ZSTATUS_TT_HISTORY
     changing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API .
   class-methods GET_TYPE
@@ -228,7 +230,7 @@ public section.
       !IV_ATTACHMENT_LIST type AGS_T_CRM_ATTACHMENT
     exporting
       !EV_ATTACHMENTS type ZATTACHMENT_TT .
-  class-methods SET_CREATION_INFO
+  class-methods SET_CREATION_INFO_DB
     importing
       !IV_GUID type CRMT_OBJECT_GUID
       !IV_DOC_PROPERTIES type ZDOC_PROPS_STRUCT .
@@ -620,7 +622,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
       "set transports
       IF iv_documentprops-transports IS NOT INITIAL.
-        CALL METHOD zcl_solmove_helper=>set_tr
+        CALL METHOD zcl_solmove_helper=>set_tr_db
           EXPORTING
             iv_guid                     = ls_orderadm_h-guid
             iv_transports               = iv_documentprops-transports
@@ -702,10 +704,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     IF iv_documentprops-status IS NOT INITIAL.
       CALL METHOD zcl_solmove_helper=>set_status
         EXPORTING
-          iv_status      = iv_documentprops-status
-          iv_status_hist = iv_documentprops-stat_hist_table
+          iv_status = iv_documentprops-status
         CHANGING
-          iv_1o_api      = lo_cd.
+          iv_1o_api = lo_cd.
     ENDIF.
     " !status set should be the last action to allow other changes for closed document!
 
@@ -716,23 +717,36 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       APPEND lv_message TO ev_message.
     ENDIF.
 
+    "once document created perform update on DB level (methods ending on _DB)
     "update creation information
-    CALL METHOD zcl_solmove_helper=>set_creation_info
+    CALL METHOD zcl_solmove_helper=>set_creation_info_db
       EXPORTING
         iv_guid           = ls_orderadm_h-guid
         iv_doc_properties = iv_documentprops.
-
+    "update approval history on db level
     IF iv_documentprops-approval_db IS NOT INITIAL.
       CALL METHOD zcl_solmove_helper=>set_approval_db
         EXPORTING
           iv_guid        = ls_orderadm_h-guid
           et_approval_db = iv_documentprops-approval_db.
     ENDIF.
-
+    "update status change history on DB level.
+    IF iv_documentprops-stat_hist_table IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_jcds_db
+        EXPORTING
+          iv_status_hist = iv_documentprops-stat_hist_table
+          iv_guid        = ls_orderadm_h-guid.
+    ENDIF.
+    "update SLA
+    IF iv_documentprops-sla IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_sla_db
+        EXPORTING
+          iv_guid   = ls_orderadm_h-guid
+          et_sla_db = iv_documentprops-sla.
+    ENDIF.
     COMMIT WORK.
 
-*    Check if document was created?
-
+*    Check if document can be read?
     lo_cd->get_orderadm_h( IMPORTING es_orderadm_h = ls_orderadm_h
         EXCEPTIONS
     document_not_found   = 1
@@ -746,7 +760,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     IF sy-subrc <> 0.
       CASE sy-subrc.
         WHEN 6.
-          lv_message = 'OK: Document closed. no changes possible any more.' .
+          lv_message = 'OK: Document closed. No changes possible any more.' .
         WHEN OTHERS.
           lv_error = sy-subrc.
           CONCATENATE 'Document:' ls_orderadm_h-object_id 'error:' lv_error 'while reading after update' INTO lv_message SEPARATED BY space.
@@ -2254,7 +2268,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD set_creation_info.
+  METHOD SET_CREATION_INFO_DB.
 
 *   update creating information
     DATA(lv_posting_date) = iv_doc_properties-posting_date.
@@ -2442,9 +2456,22 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
-  METHOD set_sla.
+  METHOD set_jcds_db.
+    DATA: lv_stat_hist   TYPE LINE OF zstatus_tt_history.
+    DATA: lv_table TYPE TABLE OF crm_jcds.
+
+    LOOP AT iv_status_hist INTO lv_stat_hist.
+      lv_stat_hist-objnr = iv_guid.
+      APPEND lv_stat_hist TO lv_table.
+    ENDLOOP.
+    MODIFY crm_jcds FROM TABLE lv_table.
+
+  ENDMETHOD.
+
+
+  METHOD set_sla_db.
     DATA: lt_sla         TYPE TABLE OF crmd_srcl_h,
-          ls_sla         TYPE  crmd_srcl_h,
+          ls_sla         TYPE crmd_srcl_h,
           lv_record_guid TYPE guid_16.
 
     LOOP AT et_sla_db INTO ls_sla.
@@ -2577,14 +2604,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 * Implement suitable error handling here
       ENDIF.
     ENDIF.
-
-    DATA: lv_table TYPE TABLE OF crm_jcds.
-    LOOP AT iv_status_hist INTO lv_stat_hist.
-      lv_stat_hist-objnr = ls_status-guid.
-      APPEND lv_stat_hist TO lv_table.
-    ENDLOOP.
-    MODIFY crm_jcds FROM TABLE lv_table.
-
   ENDMETHOD.
 
 
@@ -2752,7 +2771,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD set_tr.
+  METHOD SET_TR_DB.
     "just update TABLE /tmwflow/trord_n
     "(no changes in the managed system)
     DATA: ls_transport TYPE ztr_data_st,
@@ -2800,9 +2819,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       ls_trordhc-originator_key = iv_change_id.
       ls_trordhc-project_name = lv_context-project_id.
       ls_trordhc-smi_project = lv_context-project_id.
-
-
-
       APPEND ls_trordhc TO lt_trordhc.
     ENDLOOP.
 
