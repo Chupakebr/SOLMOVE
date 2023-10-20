@@ -144,7 +144,7 @@ START-OF-SELECTION.
 
         IF p_status IS INITIAL.
           CLEAR ls_doc_properties-status.
-          CLEAR ls_doc_properties-stat_hist.
+          CLEAR ls_doc_properties-stat_hist_table.
         ENDIF.
         IF p_texts IS INITIAL.
           CLEAR ls_doc_properties-text_all.

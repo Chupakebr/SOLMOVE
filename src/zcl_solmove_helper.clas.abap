@@ -744,8 +744,13 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     OTHERS               = 7
         ).
     IF sy-subrc <> 0.
-      lv_error = sy-subrc.
-      CONCATENATE 'Document:' ls_orderadm_h-object_id 'error:' lv_error 'while reading after update' INTO lv_message SEPARATED BY space.
+      CASE sy-subrc.
+        WHEN 6.
+          lv_message = 'OK: Document closed. no changes possible any more.' .
+        WHEN OTHERS.
+          lv_error = sy-subrc.
+          CONCATENATE 'Document:' ls_orderadm_h-object_id 'error:' lv_error 'while reading after update' INTO lv_message SEPARATED BY space.
+      ENDCASE.
       APPEND lv_message TO ev_message.
     ENDIF.
 
@@ -1257,14 +1262,14 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
-  method GET_JCDS.
-    data lv_stat type line of zstatus_tt_history.
+  METHOD get_jcds.
+    DATA lv_stat TYPE LINE OF zstatus_tt_history.
 
-    select single stat, chgnr, usnam, udate, utime from crm_jcds where objnr = @iv_guid
-      into (@lv_stat-stat, @lv_stat-chgnr, @lv_stat-usnam, @lv_stat-udate, @lv_stat-utime).  "system status
-
-    append lv_stat to ev_status.
-  endmethod.
+    SELECT stat, chgnr, usnam, udate, utime FROM crm_jcds WHERE objnr = @iv_guid
+      INTO (@lv_stat-stat, @lv_stat-chgnr, @lv_stat-usnam, @lv_stat-udate, @lv_stat-utime).  "system status
+      APPEND lv_stat TO ev_status.
+    ENDSELECT.
+  ENDMETHOD.
 
 
   METHOD get_partners.
