@@ -24,6 +24,7 @@ public section.
   class-methods GET_SLA
     importing
       !IV_GUID type CRMT_OBJECT_GUID
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
       !ET_SLA_DB type ZSLA_SRCL_TT .
   class-methods GET_TEST_DATA
@@ -1266,6 +1267,12 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         et_approval    = lt_doc_properties-approval
         et_approval_db = lt_doc_properties-approval_db.
 
+    CALL METHOD zcl_solmove_helper=>get_sla
+      EXPORTING
+        iv_guid   = iv_guid
+        iv_1o_api = lo_api_object
+      IMPORTING
+        et_sla_db = lt_doc_properties-sla.
 
   ENDMETHOD.
 
@@ -1342,8 +1349,23 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   METHOD get_sla.
-"   DATA: .
+    "   DATA: .
     SELECT * FROM crmd_srcl_h WHERE guid = @iv_guid INTO TABLE @et_sla_db.
+    CALL METHOD iv_1o_api->get_appointments
+      IMPORTING
+        et_appointment       = DATA(lt_appointment)
+      EXCEPTIONS
+        document_not_found   = 1
+        error_occurred       = 2
+        document_locked      = 3
+        no_change_authority  = 4
+        no_display_authority = 5
+        no_change_allowed    = 6
+        OTHERS               = 7.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
 
   ENDMETHOD.
 
