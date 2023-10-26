@@ -26,6 +26,7 @@ public section.
       !IV_GUID type CRMT_OBJECT_GUID
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
+      !ET_APPOINTMENT type CRMT_APPOINTMENT_WRKT
       !ET_SLA_DB type ZSLA_SRCL_TT .
   class-methods GET_TEST_DATA
     importing
@@ -37,6 +38,10 @@ public section.
     importing
       !IV_GUID type CRMT_OBJECT_GUID
       !ET_SLA_DB type ZSLA_SRCL_TT .
+  class-methods SET_SLA
+    importing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
+      !ET_APPOINTMENT type CRMT_APPOINTMENT_WRKT .
   class-methods SET_APPROVAL
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -708,6 +713,12 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         iv_guid     = ls_orderadm_h-guid
         et_approval = iv_documentprops-approval.
 
+    "set SLA
+    CALL METHOD zcl_solmove_helper=>set_sla
+      EXPORTING
+        iv_1o_api      = lo_cd
+        et_appointment = iv_documentprops-appointment_t.
+
     "set status
     " !status set should be the last action to allow other changes for closed document!
     IF iv_documentprops-status IS NOT INITIAL.
@@ -1163,7 +1174,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     "get texts
     CALL METHOD zcl_solmove_helper=>get_texts
       EXPORTING
-        iv_1o_api  = lo_api_object
+        iv_1o_api       = lo_api_object
       IMPORTING
         et_text_all     = lt_doc_properties-text_all
         et_textdata_gen = lt_doc_properties-text_gen.
@@ -1267,12 +1278,14 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         et_approval    = lt_doc_properties-approval
         et_approval_db = lt_doc_properties-approval_db.
 
+    "get SLA
     CALL METHOD zcl_solmove_helper=>get_sla
       EXPORTING
-        iv_guid   = iv_guid
-        iv_1o_api = lo_api_object
+        iv_guid        = iv_guid
+        iv_1o_api      = lo_api_object
       IMPORTING
-        et_sla_db = lt_doc_properties-sla.
+        et_sla_db      = lt_doc_properties-sla
+        et_appointment = lt_doc_properties-appointment_t.
 
   ENDMETHOD.
 
@@ -1353,7 +1366,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     SELECT * FROM crmd_srcl_h WHERE guid = @iv_guid INTO TABLE @et_sla_db.
     CALL METHOD iv_1o_api->get_appointments
       IMPORTING
-        et_appointment       = DATA(lt_appointment)
+        et_appointment       = et_appointment
       EXCEPTIONS
         document_not_found   = 1
         error_occurred       = 2
@@ -1365,7 +1378,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     IF sy-subrc <> 0.
 * Implement suitable error handling here
     ENDIF.
-
 
   ENDMETHOD.
 
@@ -2495,6 +2507,35 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       APPEND lv_stat_hist TO lv_table.
     ENDLOOP.
     MODIFY crm_jcds FROM TABLE lv_table.
+
+  ENDMETHOD.
+
+
+  METHOD set_sla.
+    DATA: lt_appointment TYPE crmt_appointment_comt,
+          ls_work        TYPE crmt_appointment_wrk,
+          ls_appointment TYPE crmt_appointment_com,
+          lv_record_guid TYPE guid_16.
+
+    LOOP AT et_appointment INTO ls_work.
+      MOVE-CORRESPONDING ls_work TO ls_appointment.
+      ls_appointment-ref_guid = iv_1o_api->get_guid( ).
+      APPEND ls_appointment TO lt_appointment.
+    ENDLOOP.
+    CALL METHOD iv_1o_api->set_appointments
+      EXPORTING
+        it_appointment    = lt_appointment
+*        CHANGING
+*       cv_log_handle     =
+      EXCEPTIONS
+        error_occurred    = 1
+        document_locked   = 2
+        no_change_allowed = 3
+        no_authority      = 4
+        OTHERS            = 5.
+    IF sy-subrc <> 0.
+*       Implement suitable error handling here
+    ENDIF.
 
   ENDMETHOD.
 
