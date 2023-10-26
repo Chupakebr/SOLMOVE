@@ -2524,7 +2524,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     LOOP AT et_appointment INTO ls_work.
       MOVE-CORRESPONDING ls_work TO ls_appointment.
       ls_appointment-ref_guid = iv_1o_api->get_guid( ).
-      INSERT ls_appointment INTO lt_appointment.
+      INSERT ls_appointment INTO TABLE lt_appointment.
     ENDLOOP.
     CALL METHOD iv_1o_api->set_appointments
       EXPORTING
