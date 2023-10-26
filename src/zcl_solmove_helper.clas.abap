@@ -34,14 +34,14 @@ public section.
     exporting
       !ET_APPROVAL type CRMT_APPROVAL_WRK
       !ET_APPROVAL_DB type ZAPPROVAL_DB .
-  class-methods SET_SLA_DB
-    importing
-      !IV_GUID type CRMT_OBJECT_GUID
-      !ET_SLA_DB type ZSLA_SRCL_TT .
   class-methods SET_SLA
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
       !ET_APPOINTMENT type CRMT_APPOINTMENT_WRKT .
+  class-methods SET_SLA_DB
+    importing
+      !IV_GUID type CRMT_OBJECT_GUID
+      !ET_SLA_DB type ZSLA_SRCL_TT .
   class-methods SET_APPROVAL
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -708,16 +708,20 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     ENDIF.
 
     "set approval procedure
-    CALL METHOD zcl_solmove_helper=>set_approval
-      EXPORTING
-        iv_guid     = ls_orderadm_h-guid
-        et_approval = iv_documentprops-approval.
+    IF iv_documentprops-approval IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_approval
+        EXPORTING
+          iv_guid     = ls_orderadm_h-guid
+          et_approval = iv_documentprops-approval.
+    ENDIF.
 
     "set SLA
-    CALL METHOD zcl_solmove_helper=>set_sla
-      EXPORTING
-        iv_1o_api      = lo_cd
-        et_appointment = iv_documentprops-appointment_t.
+    IF iv_documentprops-appointment_t IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_sla
+        EXPORTING
+          iv_1o_api      = lo_cd
+          et_appointment = iv_documentprops-appointment_t.
+    ENDIF.
 
     "set status
     " !status set should be the last action to allow other changes for closed document!
@@ -2125,7 +2129,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     "first check if there are attachments (can be enhanced)
     iv_1o_api->get_attachment_list( IMPORTING et_attach_list = lt_attachment_list ).
-    IF lt_attachment_list IS NOT INITIAL.
+    IF lt_attachment_list IS INITIAL.
 
       ls_bo-instid = iv_guid.
       ls_bo-typeid = iv_object_type.
@@ -2520,7 +2524,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     LOOP AT et_appointment INTO ls_work.
       MOVE-CORRESPONDING ls_work TO ls_appointment.
       ls_appointment-ref_guid = iv_1o_api->get_guid( ).
-      APPEND ls_appointment TO lt_appointment.
+      INSERT ls_appointment INTO lt_appointment.
     ENDLOOP.
     CALL METHOD iv_1o_api->set_appointments
       EXPORTING
