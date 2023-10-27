@@ -27,7 +27,8 @@ public section.
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
       !ET_APPOINTMENT type CRMT_APPOINTMENT_WRKT
-      !ET_SLA_DB type ZSLA_SRCL_TT .
+      !ET_SLA_DB type ZSLA_SRCL_TT
+      !ET_SLA_DB_2 type ZSLA_SCAPPTSEG_TT .
   class-methods GET_TEST_DATA
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -41,7 +42,8 @@ public section.
   class-methods SET_SLA_DB
     importing
       !IV_GUID type CRMT_OBJECT_GUID
-      !ET_SLA_DB type ZSLA_SRCL_TT .
+      !ET_SLA_DB type ZSLA_SRCL_TT
+      !ET_SLA_DB_2 type ZSLA_SCAPPTSEG_TT .
   class-methods SET_APPROVAL
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -762,11 +764,12 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           iv_guid        = ls_orderadm_h-guid.
     ENDIF.
     "update SLA
-    IF iv_documentprops-sla IS NOT INITIAL.
+    IF iv_documentprops-sla IS NOT INITIAL OR iv_documentprops-sla_db IS NOT INITIAL.
       CALL METHOD zcl_solmove_helper=>set_sla_db
         EXPORTING
-          iv_guid   = ls_orderadm_h-guid
-          et_sla_db = iv_documentprops-sla.
+          iv_guid     = ls_orderadm_h-guid
+          et_sla_db   = iv_documentprops-sla
+          et_sla_db_2 = iv_documentprops-sla_db.
     ENDIF.
     COMMIT WORK.
 
@@ -1289,6 +1292,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         iv_1o_api      = lo_api_object
       IMPORTING
         et_sla_db      = lt_doc_properties-sla
+        et_sla_db_2    = lt_doc_properties-sla_db
         et_appointment = lt_doc_properties-appointment_t.
 
   ENDMETHOD.
@@ -1366,8 +1370,53 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   METHOD get_sla.
-    "   DATA: .
-    SELECT * FROM crmd_srcl_h WHERE guid = @iv_guid INTO TABLE @et_sla_db.
+    "  DB DATA: .
+    SELECT * FROM crmd_srcl_h
+      WHERE guid = @iv_guid
+      INTO TABLE @et_sla_db.
+
+    SELECT SINGLE * FROM crmd_orderadm_i
+      WHERE header = @iv_guid
+      INTO @DATA(ls_sla_items).
+
+    SELECT  s~appt_guid,
+            'ITEM' AS appl_guid,
+            s~tst_from,
+            s~zone_from,
+            s~tst_to,
+            s~zone_to,
+            s~appt_type,
+            s~txt_pub_id,
+            s~entry_by,
+            s~entry_tst,
+            s~change_by,
+            s~change_tst
+      FROM crmd_link
+      LEFT JOIN scapptseg AS s ON s~appl_guid = crmd_link~guid_set
+      WHERE guid_hi = @ls_sla_items-guid
+      AND objtype_set = 30
+      UNION ALL
+      SELECT s~appt_guid,
+            'DOC' AS appl_guid,
+            s~tst_from,
+            s~zone_from,
+            s~tst_to,
+            s~zone_to,
+            s~appt_type,
+            s~txt_pub_id,
+            s~entry_by,
+            s~entry_tst,
+            s~change_by,
+            s~change_tst
+      FROM crmd_link
+      LEFT JOIN scapptseg AS s ON s~appl_guid = crmd_link~guid_set
+      WHERE guid_hi = @iv_guid
+      AND objtype_set = 30
+      INTO TABLE @data(lt_sla_db_2).
+
+      move-corresponding lt_sla_db_2 to et_sla_db_2.
+
+    " Appointments data
     CALL METHOD iv_1o_api->get_appointments
       IMPORTING
         et_appointment       = et_appointment
@@ -1382,7 +1431,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     IF sy-subrc <> 0.
 * Implement suitable error handling here
     ENDIF.
-
   ENDMETHOD.
 
 
@@ -2547,7 +2595,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   METHOD set_sla_db.
     DATA: lt_sla         TYPE TABLE OF crmd_srcl_h,
           ls_sla         TYPE crmd_srcl_h,
-          lv_record_guid TYPE guid_16.
+          lv_record_guid TYPE guid_16,
+          lt_scapp       TYPE TABLE OF scapptseg,
+          ls_scapp       TYPE scapptseg.
 
     LOOP AT et_sla_db INTO ls_sla.
       ls_sla-guid = iv_guid.
@@ -2557,8 +2607,53 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       ls_sla-record  = lv_record_guid.
       APPEND ls_sla TO lt_sla.
     ENDLOOP.
+    IF lt_sla IS NOT INITIAL.
+      MODIFY crmd_srcl_h FROM TABLE lt_sla.
+    ENDIF.
 
-    MODIFY crmd_srcl_h FROM TABLE lt_sla.
+    SELECT SINGLE * FROM crmd_orderadm_i
+    WHERE header = @iv_guid
+    INTO @DATA(ls_sla_items).
+
+    SELECT SINGLE guid_set
+    FROM crmd_link
+    WHERE guid_hi = @ls_sla_items-guid
+    INTO @DATA(lv_item_guid).
+
+    SELECT SINGLE guid_set
+    FROM crmd_link
+    WHERE guid_hi = @iv_guid
+    INTO @DATA(lv_doc_guid).
+
+    LOOP AT et_sla_db_2 INTO DATA(lv_sla_db_2).
+      CLEAR ls_scapp.
+      MOVE-CORRESPONDING lv_sla_db_2 TO ls_scapp.
+      IF lv_sla_db_2-appl_guid = 'DOC'.
+        ls_scapp-appl_guid = lv_doc_guid.
+      ELSE.
+        ls_scapp-appl_guid = lv_item_guid.
+      ENDIF.
+      IF ls_scapp-appl_guid IS NOT INITIAL.
+        SELECT SINGLE * FROM scapptseg
+          WHERE appl_guid = @ls_scapp-appl_guid
+          AND appt_type = @ls_scapp-appt_type
+          INTO @DATA(ls_scapptseg_t).
+        IF sy-subrc = 0.
+          ls_scapp-appt_guid = ls_scapptseg_t-appt_guid.
+          ls_scapp-txt_pub_id = ls_scapptseg_t-txt_pub_id.
+        ELSE.
+          "see report RSSC_DEMO_CL_APPOINTMENT_APPL
+          CALL FUNCTION 'GUID_CREATE'
+            IMPORTING
+              ev_guid_16 = ls_scapp-appt_guid.
+        ENDIF.
+        APPEND ls_scapp TO lt_scapp.
+      ENDIF.
+    ENDLOOP.
+
+    IF lt_scapp IS NOT INITIAL.
+      MODIFY scapptseg FROM TABLE lt_scapp.
+    ENDIF.
 
   ENDMETHOD.
 
