@@ -90,7 +90,9 @@ public section.
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
       !IV_DOC_GUID type ZCUSTOM_FIELDS
       !LT_DOCS type CRMT_DOC_FLOW_WRKT
-      !IV_GUID type CRMT_OBJECT_GUID .
+      !IV_GUID type CRMT_OBJECT_GUID
+    exporting
+      !EV_MESSAGE type TDLINE .
   class-methods SET_TEXTS
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
@@ -680,12 +682,19 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     ENDIF.
 
     "add document links
-    CALL METHOD zcl_solmove_helper=>set_docflow
-      EXPORTING
-        iv_1o_api   = lo_cd
-        iv_doc_guid = iv_documentprops-object_guid
-        lt_docs     = iv_documentprops-doc_flow
-        iv_guid     = ls_orderadm_h-guid.
+    IF iv_documentprops-doc_flow IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_docflow
+        EXPORTING
+          iv_1o_api   = lo_cd
+          iv_doc_guid = iv_documentprops-object_guid
+          lt_docs     = iv_documentprops-doc_flow
+          iv_guid     = ls_orderadm_h-guid
+        IMPORTING
+          ev_message  = lv_message.
+      IF lv_message IS NOT INITIAL.
+        APPEND lv_message TO ev_message.
+      ENDIF.
+    ENDIF.
 
     "set texts
     IF iv_documentprops-text_all IS NOT INITIAL.
@@ -755,7 +764,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           et_approval_db = iv_documentprops-approval_db.
     ENDIF.
     "update status change history on DB level.
-    IF iv_documentprops-stat_hist_table IS NOT INITIAL or iv_documentprops-status_db is not initial.
+    IF iv_documentprops-stat_hist_table IS NOT INITIAL OR iv_documentprops-status_db IS NOT INITIAL.
       CALL METHOD zcl_solmove_helper=>set_status_db
         EXPORTING
           iv_status_hist = iv_documentprops-stat_hist_table
@@ -2429,17 +2438,17 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
       CALL METHOD zcl_solmove_helper=>find_doc
         EXPORTING
-*         iv_doc_id   =
-          iv_doc_guid = lv_doc_guid
-*         iv_type     =
+*         iv_doc_id     =
+          iv_doc_guid   = lv_doc_guid
+*         iv_type       =
         IMPORTING
-          ev_guid     = lv_found_guid
-*        EXCEPTIONS
-*         error_mapping = 1
-*         others      = 2
-        .
+          ev_guid       = lv_found_guid
+        EXCEPTIONS
+          error_mapping = 1
+          OTHERS        = 2.
       IF sy-subrc <> 0.
-*       Implement suitable error handling here
+        CONCATENATE 'DOCFLOW skiped: GUID field:' lv_doc_guid-target_table lv_doc_guid-target_field 'missing in target.' INTO  ev_message SEPARATED BY space.
+        RETURN.
       ENDIF.
       IF  lv_found_guid IS NOT INITIAL.
         lv_doc_fl_e-objkey_a = iv_guid.
@@ -2455,10 +2464,18 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
       CALL METHOD iv_1o_api->set_doc_flow
         CHANGING
-          ct_doc_flow   = lv_doc_fl
-          cv_log_handle = lv_log_handle.
-      IF sy-subrc <> 0.
+          ct_doc_flow       = lv_doc_fl
+          cv_log_handle     = lv_log_handle
+        EXCEPTIONS
+          error_occurred    = 1
+          document_locked   = 2
+          no_change_allowed = 3
+          no_authority      = 4
+          OTHERS            = 5.
 
+      IF sy-subrc <> 0.
+        CONCATENATE 'DOCFLOW error:' '' INTO  ev_message SEPARATED BY space.
+        RETURN.
       ENDIF.
     ENDIF.
 
@@ -2794,6 +2811,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     DATA ls_extension2 TYPE crmt_extension2_com.
     DATA lv_text_html TYPE crm_text_gen_content.
     DATA lt_text_gen_com TYPE crmt_text_gen_ext_tab.
+    DATA lv_target_tdid TYPE crm_text_gen_text_id.
+    DATA lt_textid TYPE TABLE OF crm_text_gen_text_id.
+    DATA lv_skip TYPE boolean.
     FIELD-SYMBOLS:  <lt_text_gen> TYPE crmt_text_gen_ext_tab.
 
     "First check if text already set (this chek can be removed or enhanced)
@@ -2806,17 +2826,53 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
             et_text_gen = lt_textdata_gen ).
 
     IF lt_text_all IS INITIAL AND lt_textdata_gen IS INITIAL.
-      clear: lt_textdata_gen, lt_text_all.
+      CLEAR: lt_textdata_gen, lt_text_all.
+
+      "Merge text lines of HTML texts
+      LOOP AT it_textdata_gen INTO DATA(ls_textdata_gen) GROUP BY ( text_id = ls_textdata_gen-text_id ) ASCENDING ASSIGNING FIELD-SYMBOL(<text_gen_grp>).
+        CLEAR lt_textdata_gen.
+
+        " Collect all text ids with the same target text id
+        LOOP AT GROUP <text_gen_grp> ASSIGNING FIELD-SYMBOL(<text_gen>).
+          " Change target TDID with source TDID for building the text log
+          ls_textdata_gen         = <text_gen>.
+          lv_target_tdid          = <text_gen>-text_id.
+          ls_textdata_gen-text_id = <text_gen>-stx_ref_text_id.
+          CLEAR ls_textdata_gen-stx_ref_text_id.
+          APPEND ls_textdata_gen TO lt_textdata_gen.
+          APPEND lv_target_tdid  TO lt_textid.
+        ENDLOOP.
+
+        DATA(ls_text_gen_com) = merge_html_text_lines( iv_procedure    = iv_text_proc
+                                                       it_textdata_gen = lt_textdata_gen ).
+
+        ls_text_gen_com-rel_object_guid = iv_guid.
+        ls_text_gen_com-text_id         = lv_target_tdid. "Target TDID
+
+        INSERT ls_text_gen_com INTO TABLE lt_text_gen_com.
+      ENDLOOP.
 
       "Merge text lines of ITF texts
       LOOP AT it_textdata INTO DATA(ls_textdata) GROUP BY ( tdid = ls_textdata-stxh-tdid ) ASCENDING ASSIGNING FIELD-SYMBOL(<text_grp>).
         CLEAR lt_textdata.
+        lv_skip = 0.
 
         " Collect all text ids with the same target text id
         LOOP AT GROUP <text_grp> ASSIGNING FIELD-SYMBOL(<text>).
           " Change target TDID with source TDID for building the text log
+          LOOP AT lt_textid INTO DATA(lv_tdid).
+            IF lv_tdid = <text>-stxh-tdid.
+          " do not process text texts types which was processed as html
+              lv_skip = 1.
+              EXIT.
+            ENDIF.
+          ENDLOOP.
+          IF lv_skip = 1.
+            CONTINUE .
+          ENDIF.
+
           ls_textdata           = <text>.
-          DATA(lv_target_tdid)    = <text>-stxh-tdid.
+          lv_target_tdid        = <text>-stxh-tdid.
           ls_textdata-stxh-tdid = <text>-stxh-tdrefid.
           APPEND ls_textdata TO lt_textdata.
         ENDLOOP.
@@ -2839,54 +2895,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           ls_text_com-mode        = gc_mode-change.
           INSERT ls_text_com INTO TABLE lt_text_com.
         ENDLOOP.
-
       ENDLOOP.
-
-      "Merge text lines of HTML texts
-      LOOP AT it_textdata_gen INTO DATA(ls_textdata_gen) GROUP BY ( text_id = ls_textdata_gen-text_id ) ASCENDING ASSIGNING FIELD-SYMBOL(<text_gen_grp>).
-        CLEAR lt_textdata_gen.
-
-        " Collect all text ids with the same target text id
-        LOOP AT GROUP <text_gen_grp> ASSIGNING FIELD-SYMBOL(<text_gen>).
-          " Change target TDID with source TDID for building the text log
-          ls_textdata_gen         = <text_gen>.
-          lv_target_tdid          = <text_gen>-text_id.
-          ls_textdata_gen-text_id = <text_gen>-stx_ref_text_id.
-          CLEAR ls_textdata_gen-stx_ref_text_id.
-          APPEND ls_textdata_gen TO lt_textdata_gen.
-        ENDLOOP.
-
-        DATA(ls_text_gen_com) = merge_html_text_lines( iv_procedure    = iv_text_proc
-                                                       it_textdata_gen = lt_textdata_gen ).
-
-        ls_text_gen_com-rel_object_guid = iv_guid.
-        ls_text_gen_com-text_id         = lv_target_tdid. "Target TDID
-
-        INSERT ls_text_gen_com INTO TABLE lt_text_gen_com.
-
-      ENDLOOP.
-
-      " Maintain ITF text
-      IF lt_text_com IS NOT INITIAL.
-
-        DATA(ls_input_field_name) = VALUE crmt_input_field_names( fieldname = 'LINES' ).
-        DATA(lt_input_field_names) = VALUE crmt_input_field_names_tab( ( ls_input_field_name ) ).
-
-        "Update the text
-        CALL FUNCTION 'CRM_TEXT_MAINTAIN_OW'
-          EXPORTING
-            it_text                  = lt_text_com
-            iv_object_guid           = iv_guid
-            iv_object_kind           = gc_object_kind-orderadm_h
-            iv_textobject            = 'CRM_ORDERH'
-          CHANGING
-            ct_input_field_names     = lt_input_field_names
-          EXCEPTIONS
-            object_kind_unknown      = 0
-            read_error_object_buffer = 0
-            OTHERS                   = 0.
-
-      ENDIF.
 
       " Maintain HTML text
       IF lt_text_gen_com IS NOT INITIAL.
@@ -2935,8 +2944,30 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           ENDLOOP.
         ENDIF.
       ENDIF.
-      else.
-        EV_MESSAGE = 'Texts exist, skipping seting texts.'.
+      " Maintain ITF text
+      IF lt_text_com IS NOT INITIAL.
+
+        DATA(ls_input_field_name) = VALUE crmt_input_field_names( fieldname = 'LINES' ).
+        DATA(lt_input_field_names) = VALUE crmt_input_field_names_tab( ( ls_input_field_name ) ).
+
+        "Update the text
+        CALL FUNCTION 'CRM_TEXT_MAINTAIN_OW'
+          EXPORTING
+            it_text                  = lt_text_com
+            iv_object_guid           = iv_guid
+            iv_object_kind           = gc_object_kind-orderadm_h
+            iv_textobject            = 'CRM_ORDERH'
+          CHANGING
+            ct_input_field_names     = lt_input_field_names
+          EXCEPTIONS
+            object_kind_unknown      = 0
+            read_error_object_buffer = 0
+            OTHERS                   = 0.
+
+      ENDIF.
+
+    ELSE.
+      ev_message = 'Texts exist, skipping seting texts.'.
     ENDIF.
 
   ENDMETHOD.
