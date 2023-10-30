@@ -138,7 +138,9 @@ public section.
     importing
       !IV_GUID type CRMT_OBJECT_GUID
     exporting
-      !EV_STATUS type ZSTATUS_TT .
+      !EV_STATUS type ZSTATUS_TT
+      !EV_STATUS_H type ZSTATUS_TT_HISTORY
+      !EV_STATUS_DB type ZSTATUS_DB_TT .
   class-methods GET_TR
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -192,11 +194,6 @@ public section.
       !EV_CYCLE type CRMT_OBJECT_ID_DB
     exceptions
       ERROR_NOT_MAPPED .
-  class-methods GET_JCDS
-    importing
-      !IV_GUID type CRMT_OBJECT_GUID
-    exporting
-      !EV_STATUS type ZSTATUS_TT_HISTORY .
   class-methods SET_CYCLE
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -217,10 +214,11 @@ public section.
       !IT_OCC_IDS type ZSMUD_TT
     changing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API .
-  class-methods SET_JCDS_DB
+  class-methods SET_STATUS_DB
     importing
       !IV_STATUS_HIST type ZSTATUS_TT_HISTORY
-      !IV_GUID type CRMT_OBJECT_GUID .
+      !IV_GUID type CRMT_OBJECT_GUID
+      !IV_STATUS_DB type ZSTATUS_DB_TT .
   class-methods SET_STATUS
     importing
       !IV_STATUS type ZSTATUS_TT
@@ -473,10 +471,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     IF sy-subrc <> 0.
       lv_message = 'Error: Could not find created doc (check mapping).'.
       APPEND lv_message TO ev_message.
-    ELSE.
+    ELSEIF lv_guig IS NOT INITIAL.
       lv_guid_c = lv_guig.
       SELECT SINGLE object_id FROM crmd_orderadm_h WHERE guid = @lv_guig INTO @lv_id.
-      CONCATENATE 'Using document:' lv_id lv_guid_c INTO lv_message SEPARATED BY space.
+      CONCATENATE 'OK Document found, updating:' lv_id lv_guid_c INTO lv_message SEPARATED BY space.
       APPEND lv_message TO ev_message.
     ENDIF.
 
@@ -757,10 +755,11 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           et_approval_db = iv_documentprops-approval_db.
     ENDIF.
     "update status change history on DB level.
-    IF iv_documentprops-stat_hist_table IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>set_jcds_db
+    IF iv_documentprops-stat_hist_table IS NOT INITIAL or iv_documentprops-status_db is not initial.
+      CALL METHOD zcl_solmove_helper=>set_status_db
         EXPORTING
           iv_status_hist = iv_documentprops-stat_hist_table
+          iv_status_db   = iv_documentprops-status_db
           iv_guid        = ls_orderadm_h-guid.
     ENDIF.
     "update SLA
@@ -790,12 +789,12 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lv_message = 'OK: Document closed. No changes possible any more.' .
         WHEN OTHERS.
           lv_error = sy-subrc.
-          CONCATENATE 'Document:' ls_orderadm_h-object_id 'error:' lv_error 'while reading after update' INTO lv_message SEPARATED BY space.
+          CONCATENATE 'Error: Document:' ls_orderadm_h-object_id lv_error 'can`t be opened after update.' INTO lv_message SEPARATED BY space.
       ENDCASE.
       APPEND lv_message TO ev_message.
     ENDIF.
 
-    CONCATENATE 'Document:' ls_orderadm_h-object_id 'processed in target.' INTO lv_message SEPARATED BY space.
+    CONCATENATE 'OK: Document:' ls_orderadm_h-object_id 'processed in target.' INTO lv_message SEPARATED BY space.
     APPEND lv_message TO ev_message.
 
   ENDMETHOD.
@@ -1165,18 +1164,13 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     ENDIF.
 
     "get all statuses of the document
-    CALL METHOD zcl_solmove_helper=>get_status
-      EXPORTING
-        iv_guid   = iv_guid
-      IMPORTING
-        ev_status = lt_doc_properties-status.
-
-    "get hist statuses of the document
-    CALL METHOD zcl_solmove_helper=>get_jcds
-      EXPORTING
-        iv_guid   = iv_guid
-      IMPORTING
-        ev_status = lt_doc_properties-stat_hist_table.
+      CALL METHOD zcl_solmove_helper=>get_status
+        EXPORTING
+          iv_guid      = iv_guid
+        IMPORTING
+          ev_status    = lt_doc_properties-status
+          ev_status_h  = lt_doc_properties-stat_hist_table
+          ev_status_db = lt_doc_properties-status_db.
 
     "get texts
     CALL METHOD zcl_solmove_helper=>get_texts
@@ -1309,16 +1303,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 *    ELSE.
 *      MESSAGE 'iBase not mapped' type 'E' RAISING error_not_mapped.
     ENDIF.
-  ENDMETHOD.
-
-
-  METHOD get_jcds.
-    DATA lv_stat TYPE LINE OF zstatus_tt_history.
-
-    SELECT stat, chgnr, usnam, udate, utime FROM crm_jcds WHERE objnr = @iv_guid
-      INTO (@lv_stat-stat, @lv_stat-chgnr, @lv_stat-usnam, @lv_stat-udate, @lv_stat-utime).  "system status
-      APPEND lv_stat TO ev_status.
-    ENDSELECT.
   ENDMETHOD.
 
 
@@ -1467,15 +1451,25 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
-  method get_status.
-    data lv_stat type crm_j_status.
+  METHOD get_status.
+    DATA lv_stat TYPE crm_j_status.
+    DATA lv_stat_h TYPE LINE OF zstatus_tt_history.
 
-    select stat from crm_jest into (@lv_stat) "system status
-      where inact = '' and objnr = @iv_guid.
-      append lv_stat to ev_status.
-    endselect.
+    "active status
+    SELECT stat FROM crm_jest INTO TABLE @ev_status "system status
+    WHERE inact = '' AND objnr = @iv_guid.
 
-  endmethod.
+    "status change history
+    SELECT stat, chgnr, usnam, udate, utime FROM crm_jcds WHERE objnr = @iv_guid
+      INTO (@lv_stat_h-stat, @lv_stat_h-chgnr, @lv_stat_h-usnam, @lv_stat_h-udate, @lv_stat_h-utime).  "system status
+      APPEND lv_stat_h TO ev_status_h.
+    ENDSELECT.
+
+    "inactive status
+    SELECT * FROM crm_jest INTO TABLE @ev_status_db
+    WHERE objnr = @iv_guid.
+
+  ENDMETHOD.
 
 
   METHOD get_test_data.
@@ -2550,19 +2544,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
-  METHOD set_jcds_db.
-    DATA: lv_stat_hist   TYPE LINE OF zstatus_tt_history.
-    DATA: lv_table TYPE TABLE OF crm_jcds.
-
-    LOOP AT iv_status_hist INTO lv_stat_hist.
-      lv_stat_hist-objnr = iv_guid.
-      APPEND lv_stat_hist TO lv_table.
-    ENDLOOP.
-    MODIFY crm_jcds FROM TABLE lv_table.
-
-  ENDMETHOD.
-
-
   METHOD set_sla.
     DATA: lt_appointment TYPE crmt_appointment_comt,
           ls_work        TYPE crmt_appointment_wrk,
@@ -2730,17 +2711,16 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           ls_status_com-ref_kind       = 'A'.
           ls_status_com-activate       = 'X'.
 
-          APPEND ls_status_com TO lt_status_com.
+          INSERT ls_status_com INTO TABLE lt_status_com.
 
         ENDIF.
       ELSE."set system status
         READ TABLE lt_status INTO DATA(ls_status_sys) WITH KEY user_stat_proc = ''. "#EC CI_SORTSEQ
         MOVE-CORRESPONDING ls_status_sys TO ls_status_com.
         IF lv_status_c <> ls_status_com-status.
-
           ls_status_int-inact = space.
           ls_status_int-stat  = lv_status_c.
-          APPEND ls_status_int TO lt_status_int.
+          INSERT ls_status_int INTO TABLE lt_status_int.
         ENDIF.
       ENDIF.
     ENDLOOP.
@@ -2774,6 +2754,27 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 * Implement suitable error handling here
       ENDIF.
     ENDIF.
+  ENDMETHOD.
+
+
+  METHOD set_status_db.
+    DATA: lv_stat_hist  TYPE LINE OF zstatus_tt_history,
+          lv_table      TYPE TABLE OF crm_jcds,
+          lv_stat_db    TYPE crm_jest,
+          lv_table_stat TYPE TABLE OF crm_jest.
+
+    LOOP AT iv_status_hist INTO lv_stat_hist.
+      lv_stat_hist-objnr = iv_guid.
+      APPEND lv_stat_hist TO lv_table.
+    ENDLOOP.
+    MODIFY crm_jcds FROM TABLE lv_table.
+
+    LOOP AT iv_status_db INTO lv_stat_db.
+      lv_stat_db-objnr = iv_guid.
+      APPEND lv_stat_db TO lv_table_stat.
+    ENDLOOP.
+    MODIFY crm_jest FROM TABLE lv_table_stat.
+
   ENDMETHOD.
 
 
