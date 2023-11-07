@@ -21,6 +21,11 @@
    </TPOOL>
    <DESCRIPTIONS>
     <SEOCOMPOTX>
+     <CMPNAME>ASSIGN_TR</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Assigne tr in the managed system</DESCRIPT>
+    </SEOCOMPOTX>
+    <SEOCOMPOTX>
      <CMPNAME>CREATE_BP</CMPNAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Create bp</DESCRIPT>
@@ -81,6 +86,11 @@
      <DESCRIPT>Get configuration item</DESCRIPT>
     </SEOCOMPOTX>
     <SEOCOMPOTX>
+     <CMPNAME>GET_LOG</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Get custom WEBUI fields created with AET</DESCRIPT>
+    </SEOCOMPOTX>
+    <SEOCOMPOTX>
      <CMPNAME>GET_PARTNERS</CMPNAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Get custom WEBUI fields created with AET</DESCRIPT>
@@ -124,11 +134,6 @@
      <CMPNAME>GET_WEBUI_FIELDS</CMPNAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Get custom WEBUI fields created with AET</DESCRIPT>
-    </SEOCOMPOTX>
-    <SEOCOMPOTX>
-     <CMPNAME>MERGE_HTML_TEXT_LINES</CMPNAME>
-     <LANGU>E</LANGU>
-     <DESCRIPT>Refer to FM COM_TEXT_PROTHEAD_WRITE_API</DESCRIPT>
     </SEOCOMPOTX>
     <SEOCOMPOTX>
      <CMPNAME>SET_APPROVAL</CMPNAME>
@@ -218,6 +223,18 @@
    </DESCRIPTIONS>
    <DESCRIPTIONS_SUB>
     <SEOSUBCOTX>
+     <CMPNAME>ASSIGN_TR</CMPNAME>
+     <SCONAME>EV_MESSAGE</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Text Line</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>ASSIGN_TR</CMPNAME>
+     <SCONAME>IT_TRORDERS</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>replacement of /tmwflow/trordhc_type</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
      <CMPNAME>CREATE_BP</CMPNAME>
      <SCONAME>EV_MESSAGE</SCONAME>
      <LANGU>E</LANGU>
@@ -303,18 +320,24 @@
     </SEOSUBCOTX>
     <SEOSUBCOTX>
      <CMPNAME>GET_DOCFLOW</CMPNAME>
+     <SCONAME>ET_DOCS</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Transfer Table for Partners to Partner Processing</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>GET_DOCFLOW</CMPNAME>
      <SCONAME>IV_1O_API</SCONAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Solution Manager: CRM Wrapper API</DESCRIPT>
     </SEOSUBCOTX>
     <SEOSUBCOTX>
-     <CMPNAME>GET_DOCFLOW</CMPNAME>
-     <SCONAME>LT_DOCS</SCONAME>
+     <CMPNAME>GET_DOC_DATA</CMPNAME>
+     <SCONAME>EV_MESSAGE</SCONAME>
      <LANGU>E</LANGU>
-     <DESCRIPT>Transfer Table for Partners to Partner Processing</DESCRIPT>
+     <DESCRIPT>Processing log for document</DESCRIPT>
     </SEOSUBCOTX>
     <SEOSUBCOTX>
-     <CMPNAME>GET_DOC_DATA</CMPNAME>
+     <CMPNAME>GET_LOG</CMPNAME>
      <SCONAME>EV_MESSAGE</SCONAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Processing log for document</DESCRIPT>
@@ -426,24 +449,6 @@
      <SCONAME>EV_TRANSPORTS</SCONAME>
      <LANGU>E</LANGU>
      <DESCRIPT>replacement of /tmwflow/trordhc_type</DESCRIPT>
-    </SEOSUBCOTX>
-    <SEOSUBCOTX>
-     <CMPNAME>MERGE_HTML_TEXT_LINES</CMPNAME>
-     <SCONAME>IT_TEXTDATA_GEN</SCONAME>
-     <LANGU>E</LANGU>
-     <DESCRIPT>Gen. Texts: Table Type of Structure for external use</DESCRIPT>
-    </SEOSUBCOTX>
-    <SEOSUBCOTX>
-     <CMPNAME>MERGE_HTML_TEXT_LINES</CMPNAME>
-     <SCONAME>IV_PROCEDURE</SCONAME>
-     <LANGU>E</LANGU>
-     <DESCRIPT>Text Determination Procedure</DESCRIPT>
-    </SEOSUBCOTX>
-    <SEOSUBCOTX>
-     <CMPNAME>MERGE_HTML_TEXT_LINES</CMPNAME>
-     <SCONAME>RS_MERGED_LINES</SCONAME>
-     <LANGU>E</LANGU>
-     <DESCRIPT>Gen. Texts: Structure for external use</DESCRIPT>
     </SEOSUBCOTX>
     <SEOSUBCOTX>
      <CMPNAME>SET_APPROVAL</CMPNAME>
@@ -666,6 +671,12 @@
      <SCONAME>IV_TRANSPORTS</SCONAME>
      <LANGU>E</LANGU>
      <DESCRIPT>replacement of /tmwflow/trordhc_type</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>SET_TR_DB</CMPNAME>
+     <SCONAME>IV_TR_MOVE</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Boolean Variable (X=True, -=False, Space=Unknown)</DESCRIPT>
     </SEOSUBCOTX>
    </DESCRIPTIONS_SUB>
   </asx:values>

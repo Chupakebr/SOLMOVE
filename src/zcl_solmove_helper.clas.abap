@@ -5,6 +5,11 @@ class ZCL_SOLMOVE_HELPER definition
 
 public section.
 
+  class-methods ASSIGN_TR
+    importing
+      !IT_TRORDERS type /TMWFLOW/TRORDHC_T
+    exporting
+      !EV_MESSAGE type TDLINE .
   class-methods GET_BP_MAPPING
     importing
       !IV_PARTNER type CRMT_PARTNER_NUMBER
@@ -57,12 +62,6 @@ public section.
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
       !ET_SMUDS type ZSMUD_TT .
-  class-methods MERGE_HTML_TEXT_LINES
-    importing
-      !IV_PROCEDURE type COMT_TEXT_DET_PROCEDURE
-      !IT_TEXTDATA_GEN type CRMT_TEXT_GEN_EXT_TAB
-    returning
-      value(RS_MERGED_LINES) type CRMT_TEXT_GEN_EXT .
   class-methods GET_CONTEXT
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -72,7 +71,7 @@ public section.
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
-      !LT_DOCS type CRMT_DOC_FLOW_WRKT .
+      !ET_DOCS type CRMT_DOC_FLOW_WRKT .
   class-methods GET_TEXTS
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
@@ -153,9 +152,16 @@ public section.
       !IV_GUID type CRMT_OBJECT_GUID
       !IV_TRANSPORTS type ZTRANSPORTS_TT
       !IV_CHANGE_ID type CRMT_OBJECT_ID
+      !IV_TR_MOVE type BOOLEAN default ''
     exceptions
       ERROR_TR_ALREADY_REGISTERED
-      ERROR_TR_NOT_ADDED .
+      ERROR_TR_NOT_ADDED
+      ERROR_TR_NOT_CHANGED_IN_MNGED .
+  class-methods GET_LOG
+    importing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
+    exporting
+      !EV_MESSAGE type ZPROCESS_LOG_TT .
   class-methods GET_PARTNERS
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
@@ -254,6 +260,114 @@ ENDCLASS.
 
 
 CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
+
+
+  METHOD assign_tr.
+
+    DATA: lv_message      TYPE string,
+          lv_action_id    TYPE /tmwflow/action_id,
+          lv_rfc_dest     TYPE rfcdest,
+          lv_trkorr       TYPE trkorr,
+          lv_error        TYPE flag,
+          ls_old_switches TYPE /tmwflow/trorder_proj_switches,
+          ls_trorder      TYPE /tmwflow/trordhc_s,
+          ls_logic_system TYPE  /tmwflow/logical_system,
+          lt_trordhc      TYPE  /tmwflow/trordhc_t.
+
+* Get RFC destination
+
+    LOOP AT it_trorders INTO ls_trorder.
+      IF ls_trorder-status = /tmwflow/cl_constants=>con_exp_stat_modifiable.
+
+        /tmwflow/cl_system=>create_instance(
+          EXPORTING
+            iv_tech_sys_name = ls_trorder-sys_name
+            iv_tech_sys_type = ls_trorder-sys_type
+            iv_client        = ls_trorder-sys_client
+          RECEIVING
+            ro_system        = DATA(lo_system)
+          EXCEPTIONS
+            system_not_found = 1
+            OTHERS           = 2 ).
+
+        IF sy-subrc = 0.
+          lv_rfc_dest = lo_system->get_rfc_dest_tmw( ).
+        ENDIF.
+
+
+*--------------------------------------------------------------------*
+* Open CTS status switch
+        IF ls_trorder-sys_type = 'ABAP'  AND ls_trorder-cts_id IS NOT INITIAL.
+          CLEAR ls_logic_system.
+          MOVE-CORRESPONDING ls_trorder TO ls_logic_system.
+
+          CALL FUNCTION '/TMWFLOW/TU_OPEN_PROJ_SWITCHES'
+            EXPORTING
+              is_logic_system = ls_logic_system
+              iv_cts_id       = ls_trorder-cts_id
+              iv_create_req   = abap_true
+            IMPORTING
+              es_old_switches = ls_old_switches
+            EXCEPTIONS
+              internal_error  = 1
+              OTHERS          = 2.
+          IF sy-subrc <> 0.
+            "Set status and message
+            ev_message = 'Error open CTS switches in managed system'.
+          ENDIF.
+        ENDIF.
+
+
+**--------------------------------------------------------------------------
+* Assign requests
+        CLEAR lt_trordhc.
+        APPEND ls_trorder TO lt_trordhc.
+        CALL FUNCTION '/TMWFLOW/REGISTER_TR_TO_TL'
+          EXPORTING
+            id_tasklist            = ls_trorder-tasklist
+            id_originator          = ls_trorder-originator
+            id_originator_id       = ls_trorder-originator_id
+            id_originator_key      = ls_trorder-originator_key
+            id_smi_project         = ls_trorder-smi_project
+            is_logic_system        = ls_logic_system
+            it_trordhc             = lt_trordhc
+          EXCEPTIONS
+            all_tr_assigned        = 1
+            no_tr_assigned         = 2
+            tasklist_not_specified = 3
+            update_failed          = 4
+            rfc_error              = 5
+            OTHERS                 = 6.
+        IF sy-subrc <> 0.
+          CASE sy-subrc.
+            WHEN 1.
+              MESSAGE i326(/tmwflow/tasklist) WITH ls_trorder-tasklist
+                 INTO ev_message.
+            WHEN 2.
+              MESSAGE e327(/tmwflow/tasklist) WITH ls_trorder-tasklist
+                 INTO ev_message.
+            WHEN OTHERS.
+              ev_message = 'Error changing cts_id'.
+          ENDCASE.
+        ENDIF.
+
+        IF ls_trorder-cts_id IS NOT INITIAL.
+          lo_system->set_cts_status_switches(
+            EXPORTING
+              iv_cts_id         = ls_trorder-cts_id
+              iv_create_req_ok  = ls_old_switches-create_req_ok
+              iv_release_req_ok = ls_old_switches-release_req_ok
+              iv_import_req_ok  = ls_old_switches-import_req_ok
+            EXCEPTIONS
+              status_not_set    = 1
+              OTHERS            = 2 ).
+          IF sy-subrc <> 0.
+            ev_message = 'Error close CTS switches in managed system'.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
 
 
   METHOD create_bp.
@@ -640,17 +754,22 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       IF iv_documentprops-transports IS NOT INITIAL.
         CALL METHOD zcl_solmove_helper=>set_tr_db
           EXPORTING
-            iv_guid                     = ls_orderadm_h-guid
-            iv_transports               = iv_documentprops-transports
-            iv_change_id                = ls_orderadm_h-object_id
+            iv_guid                       = ls_orderadm_h-guid
+            iv_transports                 = iv_documentprops-transports
+            iv_change_id                  = ls_orderadm_h-object_id
+            iv_tr_move                    = iv_documentprops-tr_move
           EXCEPTIONS
-            error_tr_already_registered = 1
-            error_tr_not_added          = 2
-            OTHERS                      = 3.
+            error_tr_already_registered   = 1
+            error_tr_not_added            = 2
+            error_tr_not_changed_in_mnged = 3
+            OTHERS                        = 4.
         IF sy-subrc <> 0.
           CASE sy-subrc.
             WHEN 1.
               lv_message = 'Error: Transports already mapped in target system'.
+              APPEND lv_message TO ev_message.
+            WHEN 3.
+              lv_message = 'Error: Transports not updated in mnged system'.
               APPEND lv_message TO ev_message.
             WHEN OTHERS.
               lv_message = 'Error: could not add transports to the created doc'.
@@ -1075,10 +1194,17 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   METHOD get_docflow.
+    DATA: ls_doc       TYPE crmt_doc_flow_wrk,
+          lt_docs      TYPE crmt_doc_flow_wrkt,
+          lv_cycl_guid TYPE crmt_object_guid,
+          lv_guid      TYPE crmt_object_guid,
+          lv_cycle     TYPE crmt_object_id_db,
+          lv_cycle_n   TYPE crmt_object_id_db
+          .
 
     CALL METHOD iv_1o_api->get_doc_flow
       IMPORTING
-        et_doc_flow          = LT_DOCS
+        et_doc_flow          = lt_docs
       EXCEPTIONS
         document_not_found   = 1
         error_occurred       = 2
@@ -1090,6 +1216,46 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     IF sy-subrc <> 0.
 *     Implement suitable error handling here
     ENDIF.
+
+    lv_guid = iv_1o_api->get_guid( ).
+
+    "we need to modify link to cycle to save it
+    SELECT SINGLE release_crm_id INTO @lv_cycle
+      FROM tsocm_cr_context AS cont
+      LEFT JOIN aic_release_cycl AS cycl ON cont~project_id = cycl~smi_project
+      WHERE ( created_guid = @lv_guid AND release_crm_id IS NOT NULL ) " CR.
+      OR ( item_guid = @lv_guid AND release_crm_id IS NOT NULL ). " Requierements.
+
+    SELECT SINGLE guid FROM crmd_orderadm_h WHERE object_id = @lv_cycle
+      INTO @lv_cycl_guid.
+
+    CALL METHOD zcl_solmove_helper=>get_cycle
+      EXPORTING
+        iv_guid          = lv_guid
+      IMPORTING
+        ev_cycle         = lv_cycle_n
+      EXCEPTIONS
+        error_not_mapped = 1
+        OTHERS           = 2.
+
+    IF sy-subrc <> 0.
+*       Implement suitable error handling here
+    ENDIF.
+
+
+    LOOP AT lt_docs INTO ls_doc.
+      IF ls_doc-objkey_b = lv_guid AND ls_doc-objkey_a = lv_cycl_guid.
+        IF lv_cycle_n IS NOT INITIAL.
+          ls_doc-objkey_a = lv_cycle_n.
+        ELSE.
+          CONTINUE.
+        ENDIF.
+      ELSEIF ls_doc-objkey_b = lv_guid.
+        "we trying to mapp only ls_doc-objkey_b so if obj_b is document itself, we skip this
+        CONTINUE.
+      ENDIF.
+      APPEND ls_doc TO et_docs.
+    ENDLOOP.
 
   ENDMETHOD.
 
@@ -1173,13 +1339,13 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     ENDIF.
 
     "get all statuses of the document
-      CALL METHOD zcl_solmove_helper=>get_status
-        EXPORTING
-          iv_guid      = iv_guid
-        IMPORTING
-          ev_status    = lt_doc_properties-status
-          ev_status_h  = lt_doc_properties-stat_hist_table
-          ev_status_db = lt_doc_properties-status_db.
+    CALL METHOD zcl_solmove_helper=>get_status
+      EXPORTING
+        iv_guid      = iv_guid
+      IMPORTING
+        ev_status    = lt_doc_properties-status
+        ev_status_h  = lt_doc_properties-stat_hist_table
+        ev_status_db = lt_doc_properties-status_db.
 
     "get texts
     CALL METHOD zcl_solmove_helper=>get_texts
@@ -1271,7 +1437,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       EXPORTING
         iv_1o_api = lo_api_object
       IMPORTING
-        lt_docs   = lt_doc_properties-doc_flow.
+        et_docs   = lt_doc_properties-doc_flow.
 
     "get SolDoc data
     CALL METHOD zcl_solmove_helper=>get_soldoc
@@ -1298,6 +1464,14 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         et_sla_db_2    = lt_doc_properties-sla_db
         et_appointment = lt_doc_properties-appointment_t.
 
+    CALL METHOD zcl_solmove_helper=>get_log
+      EXPORTING
+        iv_1o_api = lo_api_object
+*  IMPORTING
+*       ev_message =
+      .
+
+
   ENDMETHOD.
 
 
@@ -1312,6 +1486,73 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 *    ELSE.
 *      MESSAGE 'iBase not mapped' type 'E' RAISING error_not_mapped.
     ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_log.
+
+    DATA: lt_partner_wrkt   TYPE crmt_partner_external_wrkt,
+          ls_partner        TYPE comt_partner_com,
+          lv_part_conv      TYPE crmt_partner_number,
+          target_partner_no TYPE zsolmove_target,
+          lv_message        TYPE tdline.
+
+*    CALL METHOD cl_crm_srqm_process_log->if_crm_srqm_process_log~get_process_logs
+*      EXPORTING
+*        iv_order_guid =
+*        it_log_types  =
+**  IMPORTING
+**       et_process_logs =
+*      .
+    DATA:
+      ls_orderadm_h_wrk TYPE  crmt_orderadm_h_wrk,
+      lt_orderadm_i     TYPE  crmt_orderadm_i_wrkt,
+      ls_orderadm_i     LIKE LINE OF lt_orderadm_i,
+      lv_item_guid      TYPE string,
+      lv_object_type    TYPE  crmt_subobject_category_db,
+      lv_object_id      TYPE  crmt_object_id,
+      lt_change_history TYPE  crmt_cdorder_alv_tab,
+      lv_utcdatetime    TYPE  timestamp.
+
+    FIELD-SYMBOLS:
+      <fs_change_history> TYPE LINE OF crmt_cdorder_alv_tab,
+      <fs_process_log>    TYPE LINE OF crmt_srqm_process_log
+      .
+
+* determine the object type of the 1O passed to us.
+    CALL FUNCTION 'CRM_ORDERADM_H_READ_OW'
+      EXPORTING
+        iv_orderadm_h_guid     = iv_1o_api->get_guid( )
+      IMPORTING
+        es_orderadm_h_wrk      = ls_orderadm_h_wrk
+      EXCEPTIONS
+        admin_header_not_found = 1
+        OTHERS                 = 2.
+
+    IF sy-subrc EQ 0.
+
+      lv_object_type = ls_orderadm_h_wrk-object_type.
+
+      lv_object_id   = ls_orderadm_h_wrk-object_id.
+
+      CALL FUNCTION 'CRM_CDORDER_DISPLAY'
+        EXPORTING
+          iv_header_guid = iv_1o_api->get_guid( )
+          iv_object      = lv_object_id
+          iv_bus         = lv_object_type
+          i_no_dialogue  = abap_true
+        IMPORTING
+          ausg           = lt_change_history.
+
+      CALL FUNCTION 'CRM_LOG_READ_EXTENDED'
+        EXPORTING
+          iv_object_id   = lv_object_id
+          iv_object_type = lv_object_type
+          iv_header_guid = iv_1o_api->get_guid( )
+        CHANGING
+          et_cdorder     = lt_change_history.
+    ENDIF.
+
   ENDMETHOD.
 
 
@@ -1667,217 +1908,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   ENDMETHOD.
-
-
-  method MERGE_HTML_TEXT_LINES.
-    DATA: ls_textdata  TYPE comt_text_textdata,
-        ls_prot_line TYPE comt_text_prot_line,
-        lt_struc2_r  TYPE comt_text_cust_struc2_tab,
-*        lv_itf_string TYPE string,
-        lv_string    TYPE string.
-
-  DATA: lo_regex   TYPE REF TO cl_abap_regex,
-        lo_matcher TYPE REF TO cl_abap_matcher.
-
-  STATICS:
-        lt_ttxit            TYPE comt_text_ttxit_tab.
-
-  CONSTANTS:
-    lc_object   TYPE tdobject VALUE 'CRM_ORDERH',
-    lc_charx(1) TYPE c VALUE 'X',
-    lc_asterisk VALUE '*'.
-
-  DATA(ls_empty_line)     = VALUE tline( tdformat = '*' ).
-  DATA(ls_seperator_line) = VALUE tline( tdformat = '*' tdline = '____________________' ).
-
-
-  DATA(lo_converter) = NEW cl_crm_text_format_conversion( ).
-  lo_converter->if_crm_text_format_conversion~initialize( is_thead = VALUE thead( tdobject = 'CRM_ORDERH' tdform = 'SYSTEM' tdstyle = 'SYSTEM' ) ).
-
-
-  CALL FUNCTION 'COM_TEXT_CUST_I_PROTEXTID_READ'
-    EXPORTING
-      iv_object    = lc_object
-      iv_procedure = iv_procedure
-    IMPORTING
-      et_struc2_r  = lt_struc2_r.
-
-
-  CALL FUNCTION 'COM_TEXT_CUST_I_PROC_READ'
-    EXPORTING
-      iv_object    = lc_object
-      iv_procedure = iv_procedure
-    CHANGING
-      et_ttxit     = lt_ttxit.
-
-
-*  SORT ct_textdata_gen BY changed_at DESCENDING.
-
-  CREATE OBJECT lo_regex
-    EXPORTING
-      pattern     = '<body([a-zA-Z0-9]*)([^>]*)>'
-      ignore_case = abap_true.
-
-
-  LOOP AT it_textdata_gen INTO DATA(ls_textdata_gen).
-
-    IF sy-tabix = 1.
-      MOVE-CORRESPONDING ls_textdata_gen TO rs_merged_lines.
-      CLEAR: rs_merged_lines-text_content, rs_merged_lines-text_content_plain, rs_merged_lines-guid, rs_merged_lines-rel_object_guid.
-
-      lo_matcher = lo_regex->create_matcher( text = ls_textdata_gen-text_content ).
-
-      IF lo_matcher->find_next( ) EQ abap_true.
-        DATA(lv_match)  = lo_matcher->get_submatch( 0 ).
-
-*Find REGEX
-        SPLIT ls_textdata_gen-text_content AT lv_match INTO rs_merged_lines-text_content DATA(lv_body). "'<BODY>'
-*      IF lv_body IS INITIAL.
-*        SPLIT ls_textdata_gen-text_content AT '<body>' INTO rs_merged_lines-text_content lv_body.
-*      ENDIF.
-
-        rs_merged_lines-text_content = rs_merged_lines-text_content && lv_match. "'<BODY>'.
-        REPLACE ALL OCCURRENCES OF REGEX '(</BODY>|</body>)' IN lv_body WITH space.
-        REPLACE ALL OCCURRENCES OF REGEX '(</HTML>|</html>)' IN lv_body WITH space.
-        DATA(lt_body) = VALUE string_table( ( lv_body ) ).
-        DATA(lv_index_log) = 1.
-
-      ELSE. " we assume that the text has no surrounding html tags like <BODY>
-        DATA(lv_no_surround_tags) = abap_true.
-        lv_body = ls_textdata_gen-text_content.
-        lt_body = VALUE string_table( ( lv_body ) ).
-        lv_index_log = 1.
-
-      ENDIF.
-
-    ELSE.
-*      lv_itf_string = cl_abap_char_utilities=>newline.
-      CLEAR lv_match.
-      DATA(lt_lines) = VALUE tline_tab( ( ls_empty_line ) ).
-      APPEND ls_seperator_line TO lt_lines.
-
-      lo_matcher = lo_regex->create_matcher( text = ls_textdata_gen-text_content ).
-
-      IF lo_matcher->find_next( ) EQ abap_true.
-        lv_match  = lo_matcher->get_submatch( 0 ).
-
-        SPLIT ls_textdata_gen-text_content AT lv_match INTO DATA(lv_rest) lv_body. "'<BODY>'
-*        IF lv_body IS INITIAL.
-*          SPLIT ls_textdata_gen-text_content AT '<body>' INTO lv_rest lv_body.
-*        ENDIF.
-
-*        REPLACE '</BODY></HTML>' IN lv_body WITH space.
-        REPLACE ALL OCCURRENCES OF REGEX '(</BODY>|</body>)' IN lv_body WITH space.
-        REPLACE ALL OCCURRENCES OF REGEX '(</HTML>|</html>)' IN lv_body WITH space.
-        APPEND lv_body TO lt_body.
-        lv_index_log = lines( lt_body ).
-
-      ELSE. " we assume that the text has no surrounding html tags like <BODY>
-        lv_body = ls_textdata_gen-text_content.
-        lt_body = VALUE string_table( ( lv_body ) ).
-        lv_index_log = lines( lt_body ).
-
-      ENDIF.
-    ENDIF.
-
-    CHECK NOT line_exists( lt_struc2_r[ textid = ls_textdata_gen-text_id ] ).
-
-
-    "TextID
-    READ TABLE lt_ttxit INTO DATA(ls_ttxit) WITH KEY tdspras  = sy-langu
-                                                     tdobject = lc_object
-                                                     tdid     = ls_textdata_gen-text_id.
-    IF sy-subrc = 0.
-      DATA(ls_line) = VALUE tline( tdformat = '*' tdline = ls_ttxit-tdtext ).
-      APPEND ls_line TO lt_lines.
-*      lv_itf_string = ls_ttxit-tdtext && cl_abap_char_utilities=>newline.
-    ENDIF.
-
-
-    "Timestamp
-    IF ls_textdata_gen-changed_at IS NOT INITIAL.
-      CONVERT TIME STAMP ls_textdata_gen-changed_at TIME ZONE sy-zonlo INTO DATE DATA(lv_date) TIME DATA(lv_time).
-    ELSE.
-      CONVERT TIME STAMP ls_textdata_gen-created_at TIME ZONE sy-zonlo INTO DATE lv_date TIME lv_time.
-    ENDIF.
-
-    WRITE lv_date TO ls_prot_line-item1.
-    WRITE lv_time TO ls_prot_line-item2.
-
-
-    "User
-    IF ls_textdata_gen-changed_by IS NOT INITIAL.
-      DATA(lv_user) = ls_textdata_gen-changed_by.
-    ELSE.
-      lv_user = ls_textdata_gen-created_by.
-    ENDIF.
-
-
-    cl_ags_bp_info=>crm_bupa_numbers_read(
-      EXPORTING
-        iv_username                    = lv_user
-      IMPORTING
-        ev_partner                     = DATA(lv_partner)
-      EXCEPTIONS
-        error_reading_business_partnet = 1
-        no_business_partner            = 2
-        OTHERS                         = 3 ).
-
-    IF sy-subrc = 0.
-      cl_ags_work_bp_info=>get_bp_name(
-        EXPORTING
-          iv_partner_no   = lv_partner
-        RECEIVING
-          rv_partner_name = DATA(lv_partner_name) ).
-    ENDIF.
-
-    IF lv_partner_name IS NOT INITIAL.
-      MOVE lv_partner_name(20)    TO ls_prot_line-item3.
-      MOVE lv_partner_name+20(20) TO ls_prot_line-item4.
-      MOVE lv_partner_name+40(10) TO ls_prot_line-item5.
-    ELSE.
-      MOVE ls_textdata_gen-changed_by TO ls_prot_line-item3.
-      CLEAR: ls_prot_line-item4, ls_prot_line-item5.
-    ENDIF.
-
-
-    lv_string = ls_prot_line.
-    ls_line-tdformat = '*'.
-    ls_line-tdline   = lv_string.
-    APPEND ls_line TO lt_lines.
-
-
-    "Transform ITF to ITFSTRING
-    DATA(lv_itf_string) = cl_gstext_tools=>transform_itf_to_itfstring( it_itf_text = lt_lines ).
-*    lv_itf_string = lv_itf_string && lv_string.
-
-
-    "Transform ITF to HTML
-    lo_converter->if_crm_text_format_conversion~convert_itf_to_html(
-      EXPORTING
-        iv_itf_text                  =  lv_itf_string
-        iv_add_html_surrounding_tags =  abap_false
-      IMPORTING
-        ev_html_text                 =  DATA(lv_text_html) ).
-
-    IF lv_text_html IS NOT INITIAL.
-      INSERT lv_text_html INTO lt_body INDEX lv_index_log.
-    ENDIF.
-
-    CLEAR: lv_partner, lv_partner_name, lv_itf_string, lv_text_html, lt_lines.
-  ENDLOOP.
-
-  LOOP AT lt_body INTO lv_body.
-    rs_merged_lines-text_content = rs_merged_lines-text_content && lv_body.
-  ENDLOOP.
-
-  IF lv_no_surround_tags = abap_false.
-    rs_merged_lines-text_content = rs_merged_lines-text_content && '</BODY></HTML>'.
-  ENDIF.
-  rs_merged_lines-mode = 'A'.
-
-  CLEAR: rs_merged_lines-text_content_plain.
-  endmethod.
 
 
   METHOD set_approval.
@@ -2425,6 +2455,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lv_doc_l      TYPE crmt_doc_flow_com,
           lv_log_handle TYPE balloghndl,
           lv_doc_guid   TYPE zcustom_fields,
+          lv_cycl_guid  TYPE crmt_object_guid,
           lv_found_guid TYPE crmt_object_guid.
 
     lv_doc_guid = iv_doc_guid.
@@ -2434,26 +2465,37 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
       "build link
       MOVE-CORRESPONDING lv_doc TO lv_doc_fl_e.
-      lv_doc_guid-value = lv_doc_fl_e-objkey_b.
+      "link to cycle
+      IF strlen( lv_doc_fl_e-objkey_a ) = 10.
+        SELECT SINGLE guid FROM crmd_orderadm_h WHERE object_id = @lv_doc_fl_e-objkey_a
+        INTO @lv_cycl_guid.
+        IF lv_cycl_guid IS NOT INITIAL.
+          lv_doc_fl_e-objkey_a = lv_cycl_guid.
+          lv_doc_fl_e-objkey_b = iv_guid. " guid of the doc
+          APPEND lv_doc_fl_e TO lv_doc_l-doc_link.
+        ENDIF.
+      ELSE.
+        lv_doc_guid-value = lv_doc_fl_e-objkey_b.
 
-      CALL METHOD zcl_solmove_helper=>find_doc
-        EXPORTING
-*         iv_doc_id     =
-          iv_doc_guid   = lv_doc_guid
-*         iv_type       =
-        IMPORTING
-          ev_guid       = lv_found_guid
-        EXCEPTIONS
-          error_mapping = 1
-          OTHERS        = 2.
-      IF sy-subrc <> 0.
-        CONCATENATE 'DOCFLOW skiped: GUID field:' lv_doc_guid-target_table lv_doc_guid-target_field 'missing in target.' INTO  ev_message SEPARATED BY space.
-        RETURN.
-      ENDIF.
-      IF  lv_found_guid IS NOT INITIAL.
-        lv_doc_fl_e-objkey_a = iv_guid.
-        lv_doc_fl_e-objkey_b = lv_found_guid. " guid of the doc
-        APPEND lv_doc_fl_e TO lv_doc_l-doc_link.
+        CALL METHOD zcl_solmove_helper=>find_doc
+          EXPORTING
+*           iv_doc_id     =
+            iv_doc_guid   = lv_doc_guid
+*           iv_type       =
+          IMPORTING
+            ev_guid       = lv_found_guid
+          EXCEPTIONS
+            error_mapping = 1
+            OTHERS        = 2.
+        IF sy-subrc <> 0.
+          CONCATENATE 'DOCFLOW skiped: GUID field:' lv_doc_guid-target_table lv_doc_guid-target_field 'missing in target.' INTO  ev_message SEPARATED BY space.
+          RETURN.
+        ENDIF.
+        IF  lv_found_guid IS NOT INITIAL.
+          lv_doc_fl_e-objkey_a = iv_guid.
+          lv_doc_fl_e-objkey_b = lv_found_guid. " guid of the doc
+          APPEND lv_doc_fl_e TO lv_doc_l-doc_link.
+        ENDIF.
       ENDIF.
     ENDLOOP.
 
@@ -2828,54 +2870,43 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     IF lt_text_all IS INITIAL AND lt_textdata_gen IS INITIAL.
       CLEAR: lt_textdata_gen, lt_text_all.
 
-      "Merge text lines of HTML texts
-      LOOP AT it_textdata_gen INTO DATA(ls_textdata_gen) GROUP BY ( text_id = ls_textdata_gen-text_id ) ASCENDING ASSIGNING FIELD-SYMBOL(<text_gen_grp>).
-        CLEAR lt_textdata_gen.
-
-        " Collect all text ids with the same target text id
-        LOOP AT GROUP <text_gen_grp> ASSIGNING FIELD-SYMBOL(<text_gen>).
-          " Change target TDID with source TDID for building the text log
-          ls_textdata_gen         = <text_gen>.
-          lv_target_tdid          = <text_gen>-text_id.
-          ls_textdata_gen-text_id = <text_gen>-stx_ref_text_id.
-          CLEAR ls_textdata_gen-stx_ref_text_id.
-          APPEND ls_textdata_gen TO lt_textdata_gen.
-          APPEND lv_target_tdid  TO lt_textid.
-        ENDLOOP.
-
-        DATA(ls_text_gen_com) = merge_html_text_lines( iv_procedure    = iv_text_proc
-                                                       it_textdata_gen = lt_textdata_gen ).
-
-        ls_text_gen_com-rel_object_guid = iv_guid.
-        ls_text_gen_com-text_id         = lv_target_tdid. "Target TDID
-
-        INSERT ls_text_gen_com INTO TABLE lt_text_gen_com.
+      "HTML texts
+      LOOP AT it_textdata_gen INTO DATA(ls_textdata_gen).
+        ls_textdata_gen-rel_object_guid = iv_guid.
+        CLEAR: ls_textdata_gen-guid.
+        ls_textdata_gen-mode = 'A'.
+        CLEAR: ls_textdata_gen-text_content_plain.
+        INSERT ls_textdata_gen INTO TABLE lt_text_gen_com.
+        APPEND ls_textdata_gen-text_id  TO lt_textid. "will not process ITF texts if text was processed as HTML
       ENDLOOP.
 
-      "Merge text lines of ITF texts
-      LOOP AT it_textdata INTO DATA(ls_textdata) GROUP BY ( tdid = ls_textdata-stxh-tdid ) ASCENDING ASSIGNING FIELD-SYMBOL(<text_grp>).
+      "ITF texts
+      LOOP AT it_textdata INTO DATA(ls_textdata)
+        GROUP BY ( tdid = ls_textdata-stxh-tdid ) ASCENDING ASSIGNING FIELD-SYMBOL(<text_grp>).
+
         CLEAR lt_textdata.
+
         lv_skip = 0.
+        LOOP AT lt_textid INTO DATA(lv_tdid).
+          IF lv_tdid = ls_textdata-stxh-tdid.
+            " do not process text texts types which was processed as html
+            lv_skip = 1.
+            EXIT.
+          ENDIF.
+        ENDLOOP.
+        IF lv_skip = 1.
+          CONTINUE.
+        ENDIF.
 
         " Collect all text ids with the same target text id
         LOOP AT GROUP <text_grp> ASSIGNING FIELD-SYMBOL(<text>).
           " Change target TDID with source TDID for building the text log
-          LOOP AT lt_textid INTO DATA(lv_tdid).
-            IF lv_tdid = <text>-stxh-tdid.
-          " do not process text texts types which was processed as html
-              lv_skip = 1.
-              EXIT.
-            ENDIF.
-          ENDLOOP.
-          IF lv_skip = 1.
-            CONTINUE .
-          ENDIF.
-
           ls_textdata           = <text>.
           lv_target_tdid        = <text>-stxh-tdid.
           ls_textdata-stxh-tdid = <text>-stxh-tdrefid.
           APPEND ls_textdata TO lt_textdata.
         ENDLOOP.
+
 
         cl_im_ai_crm_copy_badi=>crm_orderh_text_write_api(
           EXPORTING
@@ -2973,12 +3004,14 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD SET_TR_DB.
+  METHOD set_tr_db.
     "just update TABLE /tmwflow/trord_n
     "(no changes in the managed system)
-    DATA: ls_transport TYPE ztr_data_st,
-          lt_trordhc   TYPE /tmwflow/trordhc_t,
-          ls_trordhc   TYPE /tmwflow/trordhc_s.
+    DATA: ls_transport    TYPE ztr_data_st,
+          lt_trordhc      TYPE /tmwflow/trordhc_t,
+          ls_trordhc      TYPE /tmwflow/trordhc_s,
+          ls_logic_system TYPE /tmwflow/logical_system,
+          lv_message      TYPE tdline.
     "Prepare missing information for the transport
     SELECT SINGLE * FROM tsocm_cr_context INTO @DATA(lv_context)
     WHERE guid = @iv_guid AND item_guid = @iv_guid .
@@ -3010,11 +3043,21 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         AND src_sys_type = @ls_transport-sys_type
         AND src_sys_client = @ls_transport-sys_client.
 
+      SELECT SINGLE * FROM /tmwflow/projman INTO @DATA(ls_projman)
+      WHERE tasklist = @lv_rel-tasklist_id
+      AND status   = @/tmwflow/cl_constants=>con_config_stat-active
+      AND src_sys_name = @ls_transport-sys_name
+      AND src_sys_type = @ls_transport-sys_type
+      AND src_sys_client = @ls_transport-sys_client.
+
       MOVE-CORRESPONDING ls_transport TO ls_trordhc.
       " !but we are not changing CTS_IT = Inconsistancy
+      IF ls_projman IS NOT INITIAL.
+        ls_trordhc-cts_id = ls_projman-cts_id.
+      ENDIF.
       ls_trordhc-tasklist = lv_rel-tasklist_id.
       IF ls_track_hdr IS NOT INITIAL.
-        " !possible inconsistance
+        " !possible inconsistance if system not in the cycle
         ls_trordhc-transport_track = ls_track_hdr-transport_track.
       ENDIF.
       ls_trordhc-originator_id = iv_guid.
@@ -3035,6 +3078,23 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
          WITH    '/TMWFLOW/TRORD_N'
          RAISING error_tr_not_added.
     ENDIF.
+
+    IF iv_tr_move IS NOT INITIAL.
+      "move unreleased tr to the new CTS id
+      "refer to /TMWFLOW/IF_COMMON_TRANSPORT~CREATE_TR
+      CALL METHOD zcl_solmove_helper=>assign_tr
+        EXPORTING
+          it_trorders = lt_trordhc
+        IMPORTING
+          ev_message  = lv_message.
+      IF lv_message IS NOT INITIAL.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+        RAISING error_tr_not_changed_in_mnged.
+      ENDIF.
+
+    ENDIF.
+
   ENDMETHOD.
 
 

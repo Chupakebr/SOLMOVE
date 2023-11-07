@@ -46,6 +46,7 @@ PARAMETERS p_status AS CHECKBOX DEFAULT ''. "! if document in closed status no u
 PARAMETERS p_texts  AS CHECKBOX DEFAULT ''.
 PARAMETERS p_soldoc AS CHECKBOX DEFAULT ''.
 PARAMETERS p_attach AS CHECKBOX DEFAULT ''.
+PARAMETERS p_tr     AS CHECKBOX DEFAULT ''.
 PARAMETERS p_test   AS CHECKBOX DEFAULT 'X'.
 
 START-OF-SELECTION.
@@ -128,7 +129,7 @@ START-OF-SELECTION.
       IF sy-subrc <> 0.
         CASE sy-subrc.
           WHEN 3.
-            CONCATENATE 'Please mapp t-type:' p_ttype 'in table ZSOLMOVE_MAPPONG' INTO ls_output-message SEPARATED BY space.
+            CONCATENATE 'Please mapp t-type:' p_ttype 'in table ZSOLMOVE_MAPPING' INTO ls_output-message SEPARATED BY space.
           WHEN 4 OR 6.
             ls_output-message = 'Please add external id/guid field for ext. system (table ZSOLMOVE_MAPPONG)'.
           WHEN OTHERS.
@@ -141,7 +142,6 @@ START-OF-SELECTION.
           ls_output-message = ls_message.
           APPEND ls_output TO lt_output.
         ENDLOOP.
-
         IF p_status IS INITIAL.
           CLEAR ls_doc_properties-status.
           CLEAR ls_doc_properties-stat_hist_table.
@@ -156,7 +156,9 @@ START-OF-SELECTION.
         IF p_soldoc IS INITIAL.
           CLEAR ls_doc_properties-occ_ids.
         ENDIF.
-
+        IF p_tr is NOT INITIAL.
+          ls_doc_properties-tr_move = 'X'.
+        ENDIF.
         IF p_test IS INITIAL.
           CLEAR lt_messages.
           TRY.

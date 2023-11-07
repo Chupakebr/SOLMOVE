@@ -107,6 +107,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_TR</KEY>
+     <ENTRY>Move TR in the managed system?</ENTRY>
+     <LENGTH>38</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_TTYPE</KEY>
      <ENTRY>Document Type</ENTRY>
      <LENGTH>21</LENGTH>
