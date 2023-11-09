@@ -161,6 +161,15 @@ public section.
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
+      !ET_CDPOS type ZCDPOS_TT
+      !EV_MESSAGE type ZPROCESS_LOG_TT
+      !ET_CDHDR type ZCDHDR_TT .
+  class-methods SET_LOG_DB
+    importing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
+      !IT_CDPOS type ZCDPOS_TT
+      !IT_CDHDR type ZCDHDR_TT
+    exporting
       !EV_MESSAGE type ZPROCESS_LOG_TT .
   class-methods GET_PARTNERS
     importing
@@ -214,6 +223,7 @@ public section.
       !IV_OBJECT_TYPE type SIBFTYPEID
       !IV_ATTACH_LIST type ZATTACHMENT_TT
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
+      !IT_URL_LIST type ZATTACHMENT_TT
     exporting
       !EV_MESSAGE type TDLINE .
   class-methods SET_SOLDOC
@@ -241,9 +251,10 @@ public section.
       ERROR_NOT_MAPPED .
   class-methods GET_ATTACHMENTS
     importing
-      !IV_ATTACHMENT_LIST type AGS_T_CRM_ATTACHMENT
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
-      !EV_ATTACHMENTS type ZATTACHMENT_TT .
+      !ET_URL_LIST type ZATTACHMENT_TT
+      !ET_ATTACHMENTS type ZATTACHMENT_TT .
   class-methods SET_CREATION_INFO_DB
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -572,7 +583,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lv_message    TYPE tdline,
           lv_error      TYPE char2,
           lv_id         TYPE crmt_object_id_db, "new document id.
-          lv_guid_c     TYPE char30.
+          lv_guid_c     TYPE char30,
+          lv_skip       TYPE boolean.
+
+    lv_skip = ''.
 
     "check if document already created?
     CALL METHOD zcl_solmove_helper=>find_doc
@@ -651,235 +665,237 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         WHEN 3.
           lv_message = 'Error: updating doc: document locked.'.
         WHEN 6.
-          CONCATENATE 'OK: Document:' lv_id 'closed, could not be updated. Skiping.' INTO lv_message SEPARATED BY space.
+          CONCATENATE 'OK: Document:' lv_id 'closed, could not be updated. Going to DB update.' INTO lv_message SEPARATED BY space.
         WHEN OTHERS.
           lv_error = sy-subrc.
           CONCATENATE 'Error: updating doc:' lv_id ':' lv_error INTO lv_message SEPARATED BY space.
       ENDCASE.
       APPEND lv_message TO ev_message.
-      RETURN.
+      lv_skip = 'X'.
     ENDIF.
-
-    "set description
-    lo_cd->set_short_text( EXPORTING iv_short_text = iv_documentprops-description ).
-    IF sy-subrc <> 0.
-      lv_message = 'Error: setting description.'.
-      APPEND lv_message TO ev_message.
-    ENDIF.
-
-    "set priority
-    IF iv_documentprops-priority IS NOT INITIAL.
-      lo_cd->set_priority( EXPORTING iv_priority = iv_documentprops-priority ).
-    ENDIF.
-    IF sy-subrc <> 0.
-      lv_message = 'Error: setting priority.'.
-      APPEND lv_message TO ev_message.
-    ENDIF.
-
-    "set category
-    IF iv_documentprops-category IS NOT INITIAL.
-      lo_cd->set_category( EXPORTING iv_category = iv_documentprops-category ).
+    IF lv_skip = ''.
+      "set description
+      lo_cd->set_short_text( EXPORTING iv_short_text = iv_documentprops-description ).
       IF sy-subrc <> 0.
-        lv_message = 'Error: setting category.'.
+        lv_message = 'Error: setting description.'.
         APPEND lv_message TO ev_message.
       ENDIF.
-    ENDIF.
 
-    IF iv_documentprops-categories IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>set_categories
-        EXPORTING
-          it_categories = iv_documentprops-categories
-        CHANGING
-          iv_1o_api     = lo_cd.
-    ENDIF.
-
-    "set soldoc data
-    IF iv_documentprops-occ_ids IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>set_soldoc
-        EXPORTING
-          iv_guid    = ls_orderadm_h-guid
-          it_occ_ids = iv_documentprops-occ_ids
-        CHANGING
-          iv_1o_api  = lo_cd.
-    ENDIF.
-
-    " add attachments
-    IF iv_documentprops-attach_list IS NOT INITIAL.
-      CLEAR lv_message.
-      "convert t-type
-      DATA: lv_t_type TYPE sibftypeid.
-      lv_t_type = ls_orderadm_h-object_type.
-
-      CALL METHOD zcl_solmove_helper=>set_attachments
-        EXPORTING
-          iv_1o_api      = lo_cd
-          iv_guid        = ls_orderadm_h-guid
-          iv_object_type = lv_t_type
-          iv_attach_list = iv_documentprops-attach_list
-        IMPORTING
-          ev_message     = lv_message.
-      IF lv_message IS NOT INITIAL.
+      "set priority
+      IF iv_documentprops-priority IS NOT INITIAL.
+        lo_cd->set_priority( EXPORTING iv_priority = iv_documentprops-priority ).
+      ENDIF.
+      IF sy-subrc <> 0.
+        lv_message = 'Error: setting priority.'.
         APPEND lv_message TO ev_message.
       ENDIF.
-    ENDIF.
 
-    "add ibase
-    IF iv_documentprops-ibase IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>set_ibase
-        EXPORTING
-          iv_guid   = ls_orderadm_h-guid
-          iv_ibase  = iv_documentprops-ibase
-        CHANGING
-          iv_1o_api = lo_cd.
-    ENDIF.
-
-    "add cycle
-    IF iv_documentprops-cycle IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>set_cycle
-        EXPORTING
-          iv_guid  = ls_orderadm_h-guid
-          iv_type  = ls_orderadm_h-process_type
-          iv_ibase = iv_documentprops-ibase
-          iv_cycle = iv_documentprops-cycle.
-
-      "add doc context
-      CALL METHOD zcl_solmove_helper=>set_context
-        EXPORTING
-          iv_guid     = ls_orderadm_h-guid
-          et_context  = iv_documentprops-context
-          iv_doc_guid = iv_documentprops-object_guid
-          iv_cycle    = iv_documentprops-cycle.
-
-      "set transports
-      IF iv_documentprops-transports IS NOT INITIAL.
-        CALL METHOD zcl_solmove_helper=>set_tr_db
-          EXPORTING
-            iv_guid                       = ls_orderadm_h-guid
-            iv_transports                 = iv_documentprops-transports
-            iv_change_id                  = ls_orderadm_h-object_id
-            iv_tr_move                    = iv_documentprops-tr_move
-          EXCEPTIONS
-            error_tr_already_registered   = 1
-            error_tr_not_added            = 2
-            error_tr_not_changed_in_mnged = 3
-            OTHERS                        = 4.
+      "set category
+      IF iv_documentprops-category IS NOT INITIAL.
+        lo_cd->set_category( EXPORTING iv_category = iv_documentprops-category ).
         IF sy-subrc <> 0.
-          CASE sy-subrc.
-            WHEN 1.
-              lv_message = 'Error: Transports already mapped in target system'.
-              APPEND lv_message TO ev_message.
-            WHEN 3.
-              lv_message = 'Error: Transports not updated in mnged system'.
-              APPEND lv_message TO ev_message.
-            WHEN OTHERS.
-              lv_message = 'Error: could not add transports to the created doc'.
-              APPEND lv_message TO ev_message.
-          ENDCASE.
+          lv_message = 'Error: setting category.'.
+          APPEND lv_message TO ev_message.
         ENDIF.
       ENDIF.
-    ENDIF.
 
-    "add webui fields
-    IF iv_documentprops-custom_fields IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>set_webui_fields
-        EXPORTING
-          ev_custom_fields      = iv_documentprops-custom_fields
-        CHANGING
-          iv_1o_api             = lo_cd
-        EXCEPTIONS
-          error_customer_header = 1
-          OTHERS                = 2.
-      IF sy-subrc <> 0.
-        lv_message = 'Error: Could not set document webui fields.'.
-        APPEND lv_message TO ev_message.
+      IF iv_documentprops-categories IS NOT INITIAL.
+        CALL METHOD zcl_solmove_helper=>set_categories
+          EXPORTING
+            it_categories = iv_documentprops-categories
+          CHANGING
+            iv_1o_api     = lo_cd.
       ENDIF.
-    ENDIF.
 
-    "set partners. This call is enough. Additional fields will be picked inside method set_partners
-    IF iv_documentprops-partners IS NOT INITIAL.
-      lo_cd->set_partners( EXPORTING it_partner = iv_documentprops-partners ).
-    ENDIF.
-
-    "add document links
-    IF iv_documentprops-doc_flow IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>set_docflow
-        EXPORTING
-          iv_1o_api   = lo_cd
-          iv_doc_guid = iv_documentprops-object_guid
-          lt_docs     = iv_documentprops-doc_flow
-          iv_guid     = ls_orderadm_h-guid
-        IMPORTING
-          ev_message  = lv_message.
-      IF lv_message IS NOT INITIAL.
-        APPEND lv_message TO ev_message.
+      "set soldoc data
+      IF iv_documentprops-occ_ids IS NOT INITIAL.
+        CALL METHOD zcl_solmove_helper=>set_soldoc
+          EXPORTING
+            iv_guid    = ls_orderadm_h-guid
+            it_occ_ids = iv_documentprops-occ_ids
+          CHANGING
+            iv_1o_api  = lo_cd.
       ENDIF.
-    ENDIF.
 
-    "set texts
-    IF iv_documentprops-text_all IS NOT INITIAL.
-      CLEAR lv_message.
-      CALL METHOD zcl_solmove_helper=>set_texts
-        EXPORTING
-          iv_guid         = ls_orderadm_h-guid
-          iv_text_proc    = lo_cd->av_text_proc
-          it_textdata     = iv_documentprops-text_all
-          it_textdata_gen = iv_documentprops-text_gen
-          iv_1o_api       = lo_cd
-        IMPORTING
-          ev_message      = lv_message.
-      IF sy-subrc <> 0.
-        lv_message = 'Error: Could not set texts'.
-        APPEND lv_message TO ev_message.
-      ELSEIF lv_message IS NOT INITIAL.
-        APPEND lv_message TO ev_message.
+      " add attachments
+      IF iv_documentprops-attach_list IS NOT INITIAL or iv_documentprops-url_list is not initial.
+        CLEAR lv_message.
+        "convert t-type
+        DATA: lv_t_type TYPE sibftypeid.
+        lv_t_type = ls_orderadm_h-object_type.
+
+        CALL METHOD zcl_solmove_helper=>set_attachments
+          EXPORTING
+            iv_1o_api      = lo_cd
+            iv_guid        = ls_orderadm_h-guid
+            iv_object_type = lv_t_type
+            iv_attach_list = iv_documentprops-attach_list
+            IT_URL_LIST = iv_documentprops-url_list
+          IMPORTING
+            ev_message     = lv_message.
+        IF lv_message IS NOT INITIAL.
+          APPEND lv_message TO ev_message.
+        ENDIF.
       ENDIF.
-    ENDIF.
 
-    "set approval procedure
-    IF iv_documentprops-approval IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>set_approval
-        EXPORTING
-          iv_guid     = ls_orderadm_h-guid
-          et_approval = iv_documentprops-approval.
-    ENDIF.
+      "add ibase
+      IF iv_documentprops-ibase IS NOT INITIAL.
+        CALL METHOD zcl_solmove_helper=>set_ibase
+          EXPORTING
+            iv_guid   = ls_orderadm_h-guid
+            iv_ibase  = iv_documentprops-ibase
+          CHANGING
+            iv_1o_api = lo_cd.
+      ENDIF.
 
-    "set SLA
-    IF iv_documentprops-appointment_t IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>set_sla
-        EXPORTING
-          iv_1o_api      = lo_cd
-          et_appointment = iv_documentprops-appointment_t.
-    ENDIF.
+      "add cycle
+      IF iv_documentprops-cycle IS NOT INITIAL.
+        CALL METHOD zcl_solmove_helper=>set_cycle
+          EXPORTING
+            iv_guid  = ls_orderadm_h-guid
+            iv_type  = ls_orderadm_h-process_type
+            iv_ibase = iv_documentprops-ibase
+            iv_cycle = iv_documentprops-cycle.
 
-    "set status
-    " !status set should be the last action to allow other changes for closed document!
-    IF iv_documentprops-status IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>set_status
-        EXPORTING
-          iv_status = iv_documentprops-status
-        CHANGING
-          iv_1o_api = lo_cd.
-    ENDIF.
-    " !status set should be the last action to allow other changes for closed document!
+        "add doc context
+        CALL METHOD zcl_solmove_helper=>set_context
+          EXPORTING
+            iv_guid     = ls_orderadm_h-guid
+            et_context  = iv_documentprops-context
+            iv_doc_guid = iv_documentprops-object_guid
+            iv_cycle    = iv_documentprops-cycle.
+
+        "set transports
+        IF iv_documentprops-transports IS NOT INITIAL.
+          CALL METHOD zcl_solmove_helper=>set_tr_db
+            EXPORTING
+              iv_guid                       = ls_orderadm_h-guid
+              iv_transports                 = iv_documentprops-transports
+              iv_change_id                  = ls_orderadm_h-object_id
+              iv_tr_move                    = iv_documentprops-tr_move
+            EXCEPTIONS
+              error_tr_already_registered   = 1
+              error_tr_not_added            = 2
+              error_tr_not_changed_in_mnged = 3
+              OTHERS                        = 4.
+          IF sy-subrc <> 0.
+            CASE sy-subrc.
+              WHEN 1.
+                lv_message = 'Error: Transports already mapped in target system'.
+                APPEND lv_message TO ev_message.
+              WHEN 3.
+                lv_message = 'Error: Transports not updated in mnged system'.
+                APPEND lv_message TO ev_message.
+              WHEN OTHERS.
+                lv_message = 'Error: could not add transports to the created doc'.
+                APPEND lv_message TO ev_message.
+            ENDCASE.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      "add webui fields
+      IF iv_documentprops-custom_fields IS NOT INITIAL.
+        CALL METHOD zcl_solmove_helper=>set_webui_fields
+          EXPORTING
+            ev_custom_fields      = iv_documentprops-custom_fields
+          CHANGING
+            iv_1o_api             = lo_cd
+          EXCEPTIONS
+            error_customer_header = 1
+            OTHERS                = 2.
+        IF sy-subrc <> 0.
+          lv_message = 'Error: Could not set document webui fields.'.
+          APPEND lv_message TO ev_message.
+        ENDIF.
+      ENDIF.
+
+      "set partners. This call is enough. Additional fields will be picked inside method set_partners
+      IF iv_documentprops-partners IS NOT INITIAL.
+        lo_cd->set_partners( EXPORTING it_partner = iv_documentprops-partners ).
+      ENDIF.
+
+      "add document links
+      IF iv_documentprops-doc_flow IS NOT INITIAL.
+        CALL METHOD zcl_solmove_helper=>set_docflow
+          EXPORTING
+            iv_1o_api   = lo_cd
+            iv_doc_guid = iv_documentprops-object_guid
+            lt_docs     = iv_documentprops-doc_flow
+            iv_guid     = ls_orderadm_h-guid
+          IMPORTING
+            ev_message  = lv_message.
+        IF lv_message IS NOT INITIAL.
+          APPEND lv_message TO ev_message.
+        ENDIF.
+      ENDIF.
+
+      "set texts
+      IF iv_documentprops-text_all IS NOT INITIAL.
+        CLEAR lv_message.
+        CALL METHOD zcl_solmove_helper=>set_texts
+          EXPORTING
+            iv_guid         = ls_orderadm_h-guid
+            iv_text_proc    = lo_cd->av_text_proc
+            it_textdata     = iv_documentprops-text_all
+            it_textdata_gen = iv_documentprops-text_gen
+            iv_1o_api       = lo_cd
+          IMPORTING
+            ev_message      = lv_message.
+        IF sy-subrc <> 0.
+          lv_message = 'Error: Could not set texts'.
+          APPEND lv_message TO ev_message.
+        ELSEIF lv_message IS NOT INITIAL.
+          APPEND lv_message TO ev_message.
+        ENDIF.
+      ENDIF.
+
+      "set approval procedure
+      IF iv_documentprops-approval IS NOT INITIAL.
+        CALL METHOD zcl_solmove_helper=>set_approval
+          EXPORTING
+            iv_guid     = ls_orderadm_h-guid
+            et_approval = iv_documentprops-approval.
+      ENDIF.
+
+      "set SLA
+      IF iv_documentprops-appointment_t IS NOT INITIAL.
+        CALL METHOD zcl_solmove_helper=>set_sla
+          EXPORTING
+            iv_1o_api      = lo_cd
+            et_appointment = iv_documentprops-appointment_t.
+      ENDIF.
+
+      "set status
+      " !status set should be the last action to allow other changes for closed document!
+      IF iv_documentprops-status IS NOT INITIAL.
+        CALL METHOD zcl_solmove_helper=>set_status
+          EXPORTING
+            iv_status = iv_documentprops-status
+          CHANGING
+            iv_1o_api = lo_cd.
+      ENDIF.
+      " !status set should be the last action to allow other changes for closed document!
 
 *    record document and return solution manager id and solution manager guid
-    lo_cd->save( CHANGING cv_log_handle = lv_log_handle ).
-    IF sy-subrc <> 0.
-      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO lv_message.
-      APPEND lv_message TO ev_message.
+      lo_cd->save( CHANGING cv_log_handle = lv_log_handle ).
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO lv_message.
+        APPEND lv_message TO ev_message.
+      ENDIF.
     ENDIF.
 
     "once document created perform update on DB level (methods ending on _DB)
     "update creation information
     CALL METHOD zcl_solmove_helper=>set_creation_info_db
       EXPORTING
-        iv_guid           = ls_orderadm_h-guid
+        iv_guid           = lo_cd->get_guid( )
         iv_doc_properties = iv_documentprops.
     "update approval history on db level
     IF iv_documentprops-approval_db IS NOT INITIAL.
       CALL METHOD zcl_solmove_helper=>set_approval_db
         EXPORTING
-          iv_guid        = ls_orderadm_h-guid
+          iv_guid        = lo_cd->get_guid( )
           et_approval_db = iv_documentprops-approval_db.
     ENDIF.
     "update status change history on DB level.
@@ -888,15 +904,26 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         EXPORTING
           iv_status_hist = iv_documentprops-stat_hist_table
           iv_status_db   = iv_documentprops-status_db
-          iv_guid        = ls_orderadm_h-guid.
+          iv_guid        = lo_cd->get_guid( ).
     ENDIF.
     "update SLA
     IF iv_documentprops-sla IS NOT INITIAL OR iv_documentprops-sla_db IS NOT INITIAL.
       CALL METHOD zcl_solmove_helper=>set_sla_db
         EXPORTING
-          iv_guid     = ls_orderadm_h-guid
+          iv_guid     = lo_cd->get_guid( )
           et_sla_db   = iv_documentprops-sla
           et_sla_db_2 = iv_documentprops-sla_db.
+    ENDIF.
+    "update logs
+    IF iv_documentprops-cdhdr IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_log_db
+        EXPORTING
+          iv_1o_api = lo_cd
+          it_cdhdr  = iv_documentprops-cdhdr
+          it_cdpos  = iv_documentprops-cdpos
+*      IMPORTING
+*         ev_message =
+        .
     ENDIF.
     COMMIT WORK.
 
@@ -976,6 +1003,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   METHOD get_approval.
     DATA: ls_approval_s_wrk TYPE crmt_approval_s_wrk,
           lv_new_bp         TYPE crmt_aprv_partner_number,
+          lv_old_bp         TYPE crmt_aprv_partner_number,
           lv_zer            TYPE i.
 
     "Input check
@@ -1002,6 +1030,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
     IF  et_approval-approval_steps_wrk IS NOT INITIAL.
       LOOP AT et_approval-approval_steps_wrk INTO ls_approval_s_wrk.
+        CLEAR lv_new_bp.
         CALL METHOD zcl_solmove_helper=>get_bp_mapping
           EXPORTING
             iv_partner = ls_approval_s_wrk-partner_no
@@ -1020,55 +1049,133 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       ENDLOOP.
     ENDIF.
 
-    SELECT * FROM crmd_approval_s WHERE parent_guid = @et_approval-guid INTO TABLE @et_approval_db.
+    SELECT * FROM crmd_approval_s WHERE parent_guid = @et_approval-guid INTO @DATA(ls_approval_db).
+      "change bp mapping
+      CLEAR lv_new_bp.
+      "parent_no
+      IF  ls_approval_db-partner_no IS NOT INITIAL.
+        CALL METHOD zcl_solmove_helper=>get_bp_mapping
+          EXPORTING
+            iv_partner = ls_approval_db-partner_no
+          IMPORTING
+            ev_partner = lv_new_bp.
+        IF lv_new_bp IS NOT INITIAL.
+          "add leading zeros
+          IF lv_new_bp IS NOT INITIAL.
+            lv_zer = strlen( lv_new_bp ).
+            DO 10 - lv_zer TIMES.
+              CONCATENATE '0' lv_new_bp INTO lv_new_bp.
+            ENDDO.
+          ENDIF.
+          ls_approval_db-partner_no = lv_new_bp.
+        ENDIF.
+      ENDIF.
+
+      CLEAR lv_new_bp.
+      "processed_by
+      IF  ls_approval_db-processed_by IS NOT INITIAL.
+        lv_old_bp = ls_approval_db-processed_by.
+        CALL METHOD zcl_solmove_helper=>get_bp_mapping
+          EXPORTING
+            iv_partner = lv_old_bp
+          IMPORTING
+            ev_partner = lv_new_bp.
+        IF lv_new_bp IS NOT INITIAL.
+          "add leading zeros
+          IF lv_new_bp IS NOT INITIAL.
+            lv_zer = strlen( lv_new_bp ).
+            DO 10 - lv_zer TIMES.
+              CONCATENATE '0' lv_new_bp INTO lv_new_bp.
+            ENDDO.
+          ENDIF.
+          ls_approval_db-processed_by = lv_new_bp.
+        ENDIF.
+      ENDIF.
+
+      APPEND ls_approval_db TO et_approval_db.
+    ENDSELECT.
 
   ENDMETHOD.
 
 
-  method get_attachments.
+  METHOD get_attachments.
 
-    data: ls_phio                type skwf_io,
-          lt_file_access_info    type sdokfilacis,
-          lt_file_content_ascii  type sdokcntascs,
-          lt_file_content_binary type sdokcntbins,
-          ls_attachments         type zattachment.
+    DATA: ls_phio                TYPE skwf_io,
+          lt_file_access_info    TYPE sdokfilacis,
+          lt_file_content_ascii  TYPE sdokcntascs,
+          lt_file_content_binary TYPE sdokcntbins,
+          ls_attachments         TYPE zattachment,
+          lt_attachment_list     TYPE ags_t_crm_attachment,
+          lt_url_list            TYPE ags_t_crm_attachment.
 
+
+    iv_1o_api->get_attachment_list( IMPORTING et_attach_list = lt_attachment_list
+      et_url_list = lt_url_list ).
 
 *     get attachments
-    if iv_attachment_list is not initial.
+    IF lt_attachment_list IS NOT INITIAL.
 
-      loop at iv_attachment_list into data(ls_attachment_list).
+      LOOP AT lt_attachment_list INTO DATA(ls_attachment_list).
 
-        clear: ls_phio, lt_file_access_info, lt_file_content_ascii, lt_file_content_binary, ls_attachments.
+        CLEAR: ls_phio, lt_file_access_info, lt_file_content_ascii, lt_file_content_binary, ls_attachments.
 
         ls_phio-objtype = 'P'.
         ls_phio-class = 'CRM_P_ORD'.
         ls_phio-objid = ls_attachment_list-docid.
 
-        call method cl_crm_documents=>get_with_table
-          exporting
+        CALL METHOD cl_crm_documents=>get_with_table
+          EXPORTING
             phio                = ls_phio
             raw_mode            = abap_true
-          importing
+          IMPORTING
             file_access_info    = lt_file_access_info
             file_content_ascii  = lt_file_content_ascii
             file_content_binary = lt_file_content_binary
-            error               = data(lt_errors)
-            bad_ios             = data(lt_bad_files).
+            error               = DATA(lt_errors)
+            bad_ios             = DATA(lt_bad_files).
 
         ls_attachments-phio = ls_phio.
         ls_attachments-file_access_info = lt_file_access_info.
         ls_attachments-file_content_ascii = lt_file_content_ascii.
         ls_attachments-file_content_binary = lt_file_content_binary.
+        ls_attachments-description = ls_attachment_list-description.
+        ls_attachments-extension = ls_attachment_list-extension.
+        ls_attachments-file_name = ls_attachment_list-file_name.
+        APPEND ls_attachments TO et_attachments.
+      ENDLOOP.
 
-        append ls_attachments to ev_attachments.
+    ENDIF.
+    IF lt_url_list IS NOT INITIAL.
+      LOOP AT lt_url_list INTO DATA(ls_url_list).
 
-      endloop.
+        CLEAR: ls_phio, lt_file_access_info, lt_file_content_ascii, lt_file_content_binary, ls_attachments.
 
-    endif.
+        ls_phio-objtype = 'P'.
+        ls_phio-class = 'CRM_P_URL'.
+        ls_phio-objid = ls_url_list-objid.
 
+        CALL METHOD cl_crm_documents=>get_with_url
+          EXPORTING
+            phio     = ls_phio
+            "loio     =
+            url_type = crmkw_url-standard
+          IMPORTING
+            error    = DATA(lv_error)
+            url      = ls_attachments-url
+          EXCEPTIONS
+            no_io    = 1
+            OTHERS   = 2.
+        IF sy-subrc <> 0.
+* Implement suitable error handling here
+        ENDIF.
+        ls_attachments-description = ls_url_list-description.
+        ls_attachments-extension = ls_url_list-extension.
+        ls_attachments-file_name = ls_url_list-file_name.
+        APPEND ls_attachments TO et_url_list.
+      ENDLOOP.
+    ENDIF.
 
-  endmethod.
+  ENDMETHOD.
 
 
   METHOD get_bp_mapping.
@@ -1269,7 +1376,6 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           lt_occ_ids          TYPE smud_t_guid22,
           ls_status           TYPE crmt_status_wrkt,
           lt_smud_occurrences TYPE cl_ags_crm_1o_api=>tt_smud_occurrence,
-          lt_attachment_list  TYPE ags_t_crm_attachment,
           lt_partner_wrkt     TYPE crmt_partner_external_wrkt,
           lt_partner          TYPE comt_partner_comt,
           lv_message          TYPE tdline,
@@ -1356,14 +1462,12 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         et_textdata_gen = lt_doc_properties-text_gen.
 
     " get attachments
-    lo_api_object->get_attachment_list( IMPORTING et_attach_list = lt_attachment_list ).
-    IF lt_attachment_list IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>get_attachments
-        EXPORTING
-          iv_attachment_list = lt_attachment_list
-        IMPORTING
-          ev_attachments     = lt_doc_properties-attach_list.
-    ENDIF.
+    CALL METHOD zcl_solmove_helper=>get_attachments
+      EXPORTING
+        iv_1o_api      = lo_api_object
+      IMPORTING
+        et_attachments = lt_doc_properties-attach_list
+        et_url_list    = lt_doc_properties-url_list.
 
     "get i-base
     lo_api_object->get_ibase( IMPORTING es_refobj = DATA(lv_refobj) ) .
@@ -1467,7 +1571,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     CALL METHOD zcl_solmove_helper=>get_log
       EXPORTING
         iv_1o_api = lo_api_object
-*  IMPORTING
+      IMPORTING
+        et_cdhdr  = lt_doc_properties-cdhdr
+        et_cdpos  = lt_doc_properties-cdpos
 *       ev_message =
       .
 
@@ -1490,68 +1596,50 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   METHOD get_log.
+    DATA: lv_guid        TYPE crmt_object_guid,
+          ls_cdpos       TYPE cdpos,
+          lv_cdpos_key_n TYPE cdtabkey,
+          lv_key_len     TYPE i,
+          lv_guig_str    TYPE char32.
 
-    DATA: lt_partner_wrkt   TYPE crmt_partner_external_wrkt,
-          ls_partner        TYPE comt_partner_com,
-          lv_part_conv      TYPE crmt_partner_number,
-          target_partner_no TYPE zsolmove_target,
-          lv_message        TYPE tdline.
+    lv_guid = iv_1o_api->get_guid( ).
 
-*    CALL METHOD cl_crm_srqm_process_log->if_crm_srqm_process_log~get_process_logs
-*      EXPORTING
-*        iv_order_guid =
-*        it_log_types  =
-**  IMPORTING
-**       et_process_logs =
-*      .
-    DATA:
-      ls_orderadm_h_wrk TYPE  crmt_orderadm_h_wrk,
-      lt_orderadm_i     TYPE  crmt_orderadm_i_wrkt,
-      ls_orderadm_i     LIKE LINE OF lt_orderadm_i,
-      lv_item_guid      TYPE string,
-      lv_object_type    TYPE  crmt_subobject_category_db,
-      lv_object_id      TYPE  crmt_object_id,
-      lt_change_history TYPE  crmt_cdorder_alv_tab,
-      lv_utcdatetime    TYPE  timestamp.
+    SELECT * FROM cdhdr WHERE objectid = @lv_guid INTO TABLE @et_cdhdr.
 
-    FIELD-SYMBOLS:
-      <fs_change_history> TYPE LINE OF crmt_cdorder_alv_tab,
-      <fs_process_log>    TYPE LINE OF crmt_srqm_process_log
-      .
-
-* determine the object type of the 1O passed to us.
-    CALL FUNCTION 'CRM_ORDERADM_H_READ_OW'
-      EXPORTING
-        iv_orderadm_h_guid     = iv_1o_api->get_guid( )
-      IMPORTING
-        es_orderadm_h_wrk      = ls_orderadm_h_wrk
-      EXCEPTIONS
-        admin_header_not_found = 1
-        OTHERS                 = 2.
-
-    IF sy-subrc EQ 0.
-
-      lv_object_type = ls_orderadm_h_wrk-object_type.
-
-      lv_object_id   = ls_orderadm_h_wrk-object_id.
-
-      CALL FUNCTION 'CRM_CDORDER_DISPLAY'
-        EXPORTING
-          iv_header_guid = iv_1o_api->get_guid( )
-          iv_object      = lv_object_id
-          iv_bus         = lv_object_type
-          i_no_dialogue  = abap_true
-        IMPORTING
-          ausg           = lt_change_history.
-
-      CALL FUNCTION 'CRM_LOG_READ_EXTENDED'
-        EXPORTING
-          iv_object_id   = lv_object_id
-          iv_object_type = lv_object_type
-          iv_header_guid = iv_1o_api->get_guid( )
-        CHANGING
-          et_cdorder     = lt_change_history.
-    ENDIF.
+    LOOP AT et_cdhdr INTO DATA(ls_cdhdr).
+      SELECT * FROM cdpos WHERE changenr = @ls_cdhdr-changenr INTO @ls_cdpos.
+        CLEAR lv_cdpos_key_n.
+        CASE ls_cdpos-tabname.
+          WHEN 'CRMA_PARTNER'.
+            DATA: ls_partner     TYPE crma_partner,
+                  lv_guid22      TYPE sysuuid-c22,
+                  lv_guid16      TYPE sysuuid_x,
+                  lv_partner_fct TYPE crmt_partner_fct.
+            "3 mandant
+            "22 Character GUID (Converted) for a CRM Object
+            "8 Partner Function
+            "32 Partner Number
+            lv_guid22 = ls_cdpos-tabkey+3(22).
+            lv_partner_fct = ls_cdpos-tabkey+25(8).
+            lv_guid16  = ls_cdpos-tabkey+33(32).
+            SELECT SINGLE partner FROM but000 WHERE partner_guid = @lv_guid16 INTO @DATA(lv_part_old).
+            DATA: lv_part_old_c TYPE crmt_partner_number.
+            lv_part_old_c = lv_part_old.
+            CALL METHOD zcl_solmove_helper=>get_bp_mapping
+              EXPORTING
+                iv_partner = lv_part_old_c
+              IMPORTING
+                ev_partner = DATA(lv_part_new).
+            IF lv_part_new IS NOT INITIAL.
+              CONCATENATE lv_part_new lv_partner_fct INTO lv_cdpos_key_n SEPARATED BY '@'.
+            ENDIF.
+        ENDCASE.
+        IF lv_cdpos_key_n IS NOT INITIAL.
+          ls_cdpos-tabkey = lv_cdpos_key_n.
+        ENDIF.
+        APPEND ls_cdpos TO et_cdpos.
+      ENDSELECT.
+    ENDLOOP.
 
   ENDMETHOD.
 
@@ -2206,60 +2294,129 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           ls_phio             TYPE  skwf_io,
           lt_attachment_props TYPE  sdokproptys,
           ls_attachment_props LIKE  LINE OF lt_attachment_props,
-          lt_attachment_list  TYPE ags_t_crm_attachment.
+          lt_attachment_list  TYPE ags_t_crm_attachment,
+          lt_url_list         TYPE ags_t_crm_attachment,
+          lt_url              TYPE sdokcntascs,
+          wa_url              TYPE sdokcntasc.
 
     "first check if there are attachments (can be enhanced)
-    iv_1o_api->get_attachment_list( IMPORTING et_attach_list = lt_attachment_list ).
-    IF lt_attachment_list IS INITIAL.
+    iv_1o_api->get_attachment_list( IMPORTING
+      et_attach_list = lt_attachment_list
+      et_url_list    = lt_url_list ).
+    IF lt_attachment_list IS INITIAL .
+      IF iv_attach_list IS NOT INITIAL.
 
-      ls_bo-instid = iv_guid.
-      ls_bo-typeid = iv_object_type.
-      ls_bo-catid = 'BO'. " ! Change
+        ls_bo-instid = iv_guid.
+        ls_bo-typeid = iv_object_type.
+        ls_bo-catid = 'BO'.
 
-      LOOP AT iv_attach_list INTO ls_attachment.
+        LOOP AT iv_attach_list INTO ls_attachment.
 
-        CLEAR: lt_file_err, lt_attachment_props, ls_attachment_props.
+          CLEAR: lt_file_err, lt_attachment_props, ls_attachment_props.
+          IF lines( ls_attachment-file_access_info ) > 0.
 
-        ls_attachment_props-name = 'FILE_NAME'.
-        ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
-        APPEND ls_attachment_props TO lt_attachment_props.
+            ls_attachment_props-name = 'FILE_NAME'.
+            ls_attachment_props-value = ls_attachment-file_name.
+            APPEND ls_attachment_props TO lt_attachment_props.
 
-        ls_attachment_props-name = 'TECHN_FILE_NAME'.
-        ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
-        APPEND ls_attachment_props TO lt_attachment_props.
+            ls_attachment_props-name = 'TECHN_FILE_NAME'.
+            ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
+            APPEND ls_attachment_props TO lt_attachment_props.
 
-        ls_attachment_props-name = 'DESCRIPTION'.
-        ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
-        APPEND ls_attachment_props TO lt_attachment_props.
+            ls_attachment_props-name = 'DESCRIPTION'.
+            ls_attachment_props-value = ls_attachment-description.
+            APPEND ls_attachment_props TO lt_attachment_props.
 
-        ls_attachment_props-name = 'KW_RELATIVE_URL'.
-        ls_attachment_props-value = ls_attachment-file_access_info[ 1 ]-file_name.
-        APPEND ls_attachment_props TO lt_attachment_props.
+            ls_attachment_props-name = 'EXTENSION'.
+            ls_attachment_props-value = ls_attachment-extension.
+            APPEND ls_attachment_props TO lt_attachment_props.
 
-        ls_attachment_props-name = 'LANGUAGE'.
-        ls_attachment_props-value = sy-langu.
-        APPEND ls_attachment_props TO lt_attachment_props.
+            ls_attachment_props-name = 'KW_RELATIVE_URL'.
+            ls_attachment_props-value = ls_attachment-file_name.
+            APPEND ls_attachment_props TO lt_attachment_props.
+
+            ls_attachment_props-name = 'LANGUAGE'.
+            ls_attachment_props-value = sy-langu.
+            APPEND ls_attachment_props TO lt_attachment_props.
 
 
-        CALL METHOD cl_crm_documents=>create_with_table
-          EXPORTING
-            business_object     = ls_bo
-            properties          = lt_attachment_props
-            file_access_info    = ls_attachment-file_access_info
-            file_content_binary = ls_attachment-file_content_binary
-*           file_content_ascii  = ls_attachment-file_content_ascii
-          IMPORTING
-            loio                = ls_loio
-            phio                = ls_phio
-            error               = lt_file_err.
+            CALL METHOD cl_crm_documents=>create_with_table
+              EXPORTING
+                business_object     = ls_bo
+                properties          = lt_attachment_props
+                file_access_info    = ls_attachment-file_access_info
+                file_content_binary = ls_attachment-file_content_binary
+*               file_content_ascii  = ls_attachment-file_content_ascii
+              IMPORTING
+                loio                = ls_loio
+                phio                = ls_phio
+                error               = lt_file_err.
 
-        IF lt_file_err IS NOT INITIAL.
-          CONCATENATE 'Attachment creation failed,' lt_file_err-no lt_file_err-v1 INTO ev_message SEPARATED BY space.
-          CONTINUE.
-        ENDIF.
-      ENDLOOP.
+            IF lt_file_err IS NOT INITIAL.
+              CONCATENATE 'Attachment creation failed,' lt_file_err-no lt_file_err-v1 INTO ev_message SEPARATED BY space.
+              CONTINUE.
+            ENDIF.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
     ELSE.
       ev_message = 'Attachment exist. Skipping attachments.'.
+    ENDIF.
+
+    IF lt_url_list IS INITIAL.
+      IF it_url_list IS NOT INITIAL.
+
+        ls_bo-instid = iv_guid.
+        ls_bo-typeid = iv_object_type.
+        ls_bo-catid = 'BO'.
+
+        LOOP AT it_url_list INTO ls_attachment.
+
+          wa_url-line = ls_attachment-url.
+          APPEND wa_url TO lt_url.
+
+          CLEAR: lt_file_err, lt_attachment_props, ls_attachment_props.
+
+          ls_attachment_props-name = 'FILE_NAME'.
+          ls_attachment_props-value = ls_attachment-file_name.
+          APPEND ls_attachment_props TO lt_attachment_props.
+
+          ls_attachment_props-name = 'EXTENSION'.
+          ls_attachment_props-value = ls_attachment-extension.
+          APPEND ls_attachment_props TO lt_attachment_props.
+
+
+          ls_attachment_props-name = 'DESCRIPTION'.
+          ls_attachment_props-value = ls_attachment-description.
+          APPEND ls_attachment_props TO lt_attachment_props.
+
+          ls_attachment_props-name = 'KW_RELATIVE_URL'.
+          ls_attachment_props-value = ls_attachment-file_name.
+          APPEND ls_attachment_props TO lt_attachment_props.
+
+          ls_attachment_props-name = 'LANGUAGE'.
+          ls_attachment_props-value = sy-langu.
+          APPEND ls_attachment_props TO lt_attachment_props.
+
+          CALL METHOD cl_crm_documents=>create_url
+            EXPORTING
+              url             = lt_url
+              properties      = lt_attachment_props
+              business_object = ls_bo
+            IMPORTING
+              loio            = ls_loio
+              phio            = ls_phio
+              error           = lt_file_err.
+          .
+
+          IF lt_file_err IS NOT INITIAL.
+            CONCATENATE 'Attachment URL creation failed,' lt_file_err-no lt_file_err-v1 INTO ev_message SEPARATED BY space.
+            CONTINUE.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+    ELSE.
+      ev_message = 'Attachment URL exist. Skipping URL attachments.'.
     ENDIF.
 
   ENDMETHOD.
@@ -2603,6 +2760,141 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   endmethod.
 
 
+  METHOD set_log_db.
+    DATA: lv_guid        TYPE crmt_object_guid,
+          lt_cdhdr       TYPE TABLE OF cdhdr,
+          lt_cdpos       TYPE TABLE OF cdpos,
+          pv_aendnr      TYPE cdchangenr,
+          returncode     TYPE inri-returncode,
+          ls_cdpos       TYPE cdpos,
+          lv_cdpos_key_n TYPE cdtabkey,
+          lv_key_len     TYPE i,
+          lv_guig_str    TYPE char32.
+
+    lv_guid = iv_1o_api->get_guid( ).
+
+    LOOP AT it_cdhdr INTO DATA(ls_cdhdr).
+      ls_cdhdr-objectid = lv_guid.
+      "see FG SCD_SM sub rutines.
+      CALL FUNCTION 'NUMBER_GET_NEXT'
+        EXPORTING
+          nr_range_nr             = '01'
+          object                  = 'AENDBELEG'
+        IMPORTING
+          number                  = pv_aendnr
+          returncode              = returncode
+        EXCEPTIONS
+          interval_not_found      = 1
+          number_range_not_intern = 2
+          object_not_found        = 3
+          quantity_is_0           = 0
+          quantity_is_not_1       = 0
+          interval_overflow       = 0
+          buffer_overflow         = 4
+          OTHERS                  = 4.
+
+      LOOP AT it_cdpos INTO ls_cdpos WHERE changenr = ls_cdhdr-changenr.
+        CLEAR lv_cdpos_key_n.
+        ls_cdpos-changenr = pv_aendnr.
+        ls_cdpos-objectid = lv_guid.
+        lv_key_len = strlen( ls_cdpos-tabkey ).
+        lv_guig_str = lv_guid.
+        CASE ls_cdpos-tabname.
+          WHEN 'CRMA_CUSTOMER_H' OR 'CRMA_ACTIVITY_H'
+            OR 'CRMA_SERVICE_H'  OR 'CRMA_ORDERADM_H'
+            OR 'CRMA_SRV_REQ_H'  OR 'CRMA_PRICING'
+            OR 'CRMA_BILLING'    OR 'CRMA_SALES'.
+            IF ls_cdpos-tabkey IS NOT INITIAL.
+              CONCATENATE sy-mandt lv_guig_str INTO lv_cdpos_key_n.
+            ENDIF.
+          WHEN 'CRMA_DATES'.
+            CONCATENATE sy-mandt lv_guig_str ls_cdpos-tabkey+35 INTO lv_cdpos_key_n.
+          WHEN 'CRMA_PARTNER'.
+            DATA: ls_partner     TYPE crma_partner,
+                  lv_guid22      TYPE sysuuid-c22,
+                  lv_guid16      TYPE sysuuid_x,
+                  lv_partner_fct TYPE crmt_partner_fct,
+                  lv_bp          TYPE bu_partner.
+
+            SEARCH ls_cdpos-tabkey FOR '@'.
+            IF sy-subrc = 0 AND sy-fdpos > 0.
+              lv_bp = ls_cdpos-tabkey(sy-fdpos).
+              lv_key_len = sy-fdpos + 1.
+              lv_partner_fct = ls_cdpos-tabkey+lv_key_len.
+              CALL FUNCTION 'BBP_BUPA_GET_NUMBER'
+                EXPORTING
+                  partner           = lv_bp
+                IMPORTING
+                  ev_partner_guid   = lv_guid16
+                EXCEPTIONS
+                  partner_not_valid = 1
+                  guid_not_valid    = 2
+                  no_input          = 3
+                  OTHERS            = 4.
+
+              IF lv_guid16  IS NOT INITIAL.
+                CALL FUNCTION 'GUID_CONVERT'
+                  EXPORTING
+                    iv_guid_x16            = lv_guid16
+                  IMPORTING
+                    ev_guid_c22            = lv_guid22
+                  EXCEPTIONS
+                    no_unicode_support_yet = 1
+                    parameters_error       = 2
+                    OTHERS                 = 3.
+                IF sy-subrc <> 0.
+                ENDIF.
+                "3 mandant
+                "22 Character GUID (Converted) for a CRM Object
+                "8 Partner Function
+                "32 Partner Number
+                lv_guig_str = lv_guid16.
+                CONCATENATE sy-mandt lv_guid22 lv_partner_fct lv_guig_str INTO lv_cdpos_key_n.
+              ENDIF.
+            ENDIF.
+          WHEN 'CRMA_TEXT'.
+            CONCATENATE sy-mandt ls_cdpos-tabkey+3(10) lv_guig_str INTO lv_cdpos_key_n.
+          WHEN 'CRMA_SERVICE_OS'.
+            CONCATENATE sy-mandt lv_guig_str ls_cdpos-tabkey+35 INTO lv_cdpos_key_n.
+        ENDCASE.
+        IF lv_cdpos_key_n IS NOT INITIAL.
+          ls_cdpos-tabkey = lv_cdpos_key_n.
+        ENDIF.
+        SELECT SINGLE * FROM cdpos
+          WHERE tabkey = @ls_cdpos-tabkey
+          AND objectid = @ls_cdpos-objectid
+          AND objectclas =  @ls_cdpos-objectclas
+          AND tabname = @ls_cdpos-tabname
+          AND fname = @ls_cdpos-fname
+          AND text_case = @ls_cdpos-text_case
+          AND unit_old = @ls_cdpos-unit_old
+          AND unit_new = @ls_cdpos-unit_new
+          AND cuky_old = @ls_cdpos-cuky_old
+          AND cuky_new = @ls_cdpos-cuky_new
+          AND value_new = @ls_cdpos-value_new
+          AND value_old = @ls_cdpos-value_old
+          AND _dataaging = @ls_cdpos-_dataaging
+          INTO @DATA(ls_tmp).
+        IF sy-subrc <> 0.
+          APPEND ls_cdpos TO lt_cdpos.
+        ENDIF.
+      ENDLOOP.
+      ls_cdhdr-changenr = pv_aendnr.
+      IF lt_cdpos IS NOT INITIAL.
+        APPEND ls_cdhdr TO lt_cdhdr.
+      ENDIF.
+    ENDLOOP.
+
+    IF lt_cdhdr IS NOT INITIAL.
+      MODIFY cdhdr FROM TABLE lt_cdhdr.
+    ENDIF.
+    IF lt_cdpos IS NOT INITIAL.
+      MODIFY cdpos FROM TABLE lt_cdpos.
+    ENDIF.
+
+  ENDMETHOD.
+
+
   METHOD set_sla.
     DATA: lt_appointment TYPE crmt_appointment_comt,
           ls_work        TYPE crmt_appointment_wrk,
@@ -2886,20 +3178,19 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
         CLEAR lt_textdata.
 
-        lv_skip = 0.
-        LOOP AT lt_textid INTO DATA(lv_tdid).
-          IF lv_tdid = ls_textdata-stxh-tdid.
-            " do not process text texts types which was processed as html
-            lv_skip = 1.
-            EXIT.
-          ENDIF.
-        ENDLOOP.
-        IF lv_skip = 1.
-          CONTINUE.
-        ENDIF.
-
         " Collect all text ids with the same target text id
         LOOP AT GROUP <text_grp> ASSIGNING FIELD-SYMBOL(<text>).
+          lv_skip = 0.
+          LOOP AT lt_textid INTO DATA(lv_tdid).
+            IF lv_tdid = <text>-stxh-tdid.
+              " do not process text texts types which was processed as html
+              lv_skip = 1.
+              EXIT.
+            ENDIF.
+          ENDLOOP.
+          IF lv_skip = 1.
+            CONTINUE.
+          ENDIF.
           " Change target TDID with source TDID for building the text log
           ls_textdata           = <text>.
           lv_target_tdid        = <text>-stxh-tdid.
@@ -2907,25 +3198,26 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           APPEND ls_textdata TO lt_textdata.
         ENDLOOP.
 
+        IF lt_textdata IS NOT INITIAL.
+          cl_im_ai_crm_copy_badi=>crm_orderh_text_write_api(
+            EXPORTING
+              iv_procedure = iv_text_proc
+            CHANGING
+              ct_textdata  = lt_textdata ).
 
-        cl_im_ai_crm_copy_badi=>crm_orderh_text_write_api(
-          EXPORTING
-            iv_procedure = iv_text_proc
-          CHANGING
-            ct_textdata  = lt_textdata ).
+          LOOP AT lt_textdata INTO ls_textdata.
+            CLEAR ls_text_com.
+            MOVE-CORRESPONDING ls_textdata-stxh TO ls_text_com.
 
-        LOOP AT lt_textdata INTO ls_textdata.
-          CLEAR ls_text_com.
-          MOVE-CORRESPONDING ls_textdata-stxh TO ls_text_com.
-
-          ls_text_com-ref_guid    = iv_guid.
-          ls_text_com-ref_kind    = gc_object_kind-orderadm_h.
-          ls_text_com-tdid        = lv_target_tdid.
-          ls_text_com-ext-tdspras = sy-langu.
-          ls_text_com-lines       = ls_textdata-lines.
-          ls_text_com-mode        = gc_mode-change.
-          INSERT ls_text_com INTO TABLE lt_text_com.
-        ENDLOOP.
+            ls_text_com-ref_guid    = iv_guid.
+            ls_text_com-ref_kind    = gc_object_kind-orderadm_h.
+            ls_text_com-tdid        = lv_target_tdid.
+            ls_text_com-ext-tdspras = sy-langu.
+            ls_text_com-lines       = ls_textdata-lines.
+            ls_text_com-mode        = gc_mode-change.
+            INSERT ls_text_com INTO TABLE lt_text_com.
+          ENDLOOP.
+        ENDIF.
       ENDLOOP.
 
       " Maintain HTML text

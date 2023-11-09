@@ -47,6 +47,7 @@ PARAMETERS p_texts  AS CHECKBOX DEFAULT ''.
 PARAMETERS p_soldoc AS CHECKBOX DEFAULT ''.
 PARAMETERS p_attach AS CHECKBOX DEFAULT ''.
 PARAMETERS p_tr     AS CHECKBOX DEFAULT ''.
+PARAMETERS p_log    AS CHECKBOX DEFAULT ''.
 PARAMETERS p_test   AS CHECKBOX DEFAULT 'X'.
 
 START-OF-SELECTION.
@@ -152,11 +153,16 @@ START-OF-SELECTION.
         ENDIF.
         IF p_attach IS INITIAL.
           CLEAR ls_doc_properties-attach_list.
+          CLEAR ls_doc_properties-url_list.
         ENDIF.
         IF p_soldoc IS INITIAL.
           CLEAR ls_doc_properties-occ_ids.
         ENDIF.
-        IF p_tr is NOT INITIAL.
+        IF p_log IS INITIAL.
+          CLEAR ls_doc_properties-cdhdr.
+          CLEAR ls_doc_properties-cdpos.
+        ENDIF.
+        IF p_tr IS NOT INITIAL.
           ls_doc_properties-tr_move = 'X'.
         ENDIF.
         IF p_test IS INITIAL.

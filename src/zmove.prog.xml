@@ -71,6 +71,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_LOG</KEY>
+     <ENTRY>Move logs?</ENTRY>
+     <LENGTH>18</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_OBJ_ID</KEY>
      <ENTRY>Transaction ID</ENTRY>
      <LENGTH>22</LENGTH>
