@@ -1633,6 +1633,13 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
             IF lv_part_new IS NOT INITIAL.
               CONCATENATE lv_part_new lv_partner_fct INTO lv_cdpos_key_n SEPARATED BY '@'.
             ENDIF.
+          WHEN 'CRMA_APPROVAL_S'.
+            DATA: lv_app_s_guid TYPE crmt_object_guid.
+            lv_app_s_guid = ls_cdpos-tabkey+3.
+            SELECT SINGLE step_no FROM crmd_approval_s WHERE guid = @lv_app_s_guid INTO @DATA(lv_app_s_no).
+            IF lv_app_s_no IS NOT INITIAL.
+              CONCATENATE '@' lv_app_s_no INTO lv_cdpos_key_n.
+            ENDIF.
         ENDCASE.
         IF lv_cdpos_key_n IS NOT INITIAL.
           ls_cdpos-tabkey = lv_cdpos_key_n.
@@ -2856,6 +2863,47 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
             CONCATENATE sy-mandt ls_cdpos-tabkey+3(10) lv_guig_str INTO lv_cdpos_key_n.
           WHEN 'CRMA_SERVICE_OS'.
             CONCATENATE sy-mandt lv_guig_str ls_cdpos-tabkey+35 INTO lv_cdpos_key_n.
+          WHEN 'CRMA_ORDERADM_I'.
+            "CRMD_ORDERADM_I checklist data
+            "since not migrated mapping 1 to 1
+            SELECT SINGLE guid FROM crmd_orderadm_i
+              WHERE header = @lv_guid INTO @DATA(lv_oitem_guid).
+            IF lv_oitem_guid IS NOT INITIAL.
+              lv_guig_str = lv_oitem_guid.
+              CONCATENATE sy-mandt lv_guig_str INTO lv_cdpos_key_n.
+            ENDIF.
+          WHEN 'CRMA_SERVICE_I'.
+            "todo lt_orderadm_i
+            "since not migrated mapping 1 to 1
+            SELECT SINGLE guid FROM crmd_orderadm_i
+              WHERE header = @lv_guid
+              AND object_type = 'BUS2000140' "to check
+              INTO @DATA(lv_sitem_guid).
+            IF lv_sitem_guid IS NOT INITIAL.
+              lv_guig_str = lv_sitem_guid.
+              CONCATENATE sy-mandt lv_guig_str INTO lv_cdpos_key_n.
+            ENDIF.
+          WHEN 'CRMA_APPROVAL_S'.
+            DATA: lv_app_s_no TYPE crmt_step_no.
+            SEARCH ls_cdpos-tabkey FOR '@'.
+            IF sy-subrc = 0 AND sy-fdpos = 0.
+              lv_app_s_no = ls_cdpos-tabkey+1.
+
+              SELECT SINGLE app_s~guid FROM
+                crmd_orderadm_h AS doc
+                LEFT JOIN crmd_link AS link
+                ON doc~guid = link~guid_hi AND objtype_set = '50'
+                LEFT JOIN crmd_approval_s AS app_s
+                ON app_s~parent_guid = link~guid_set
+                WHERE doc~guid = @lv_guid AND app_s~step_no = @lv_app_s_no
+                INTO @DATA(lv_app_s_guid).
+              IF lv_app_s_guid IS NOT INITIAL.
+                lv_guig_str = lv_app_s_guid.
+                CONCATENATE sy-mandt lv_guig_str INTO lv_cdpos_key_n.
+              ENDIF.
+            ENDIF.
+          WHEN 'CRMA_PRODUCT_I'.
+            "not used, not moved
         ENDCASE.
         IF lv_cdpos_key_n IS NOT INITIAL.
           ls_cdpos-tabkey = lv_cdpos_key_n.
