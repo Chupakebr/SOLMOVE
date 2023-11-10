@@ -1797,20 +1797,17 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
   METHOD get_status.
-    DATA lv_stat TYPE crm_j_status.
-    DATA lv_stat_h TYPE LINE OF zstatus_tt_history.
+    DATA lv_stat   TYPE crm_j_status.
 
     "active status
     SELECT stat FROM crm_jest INTO TABLE @ev_status "system status
     WHERE inact = '' AND objnr = @iv_guid.
 
     "status change history
-    SELECT stat, chgnr, usnam, udate, utime FROM crm_jcds WHERE objnr = @iv_guid
-      INTO (@lv_stat_h-stat, @lv_stat_h-chgnr, @lv_stat_h-usnam, @lv_stat_h-udate, @lv_stat_h-utime).  "system status
-      APPEND lv_stat_h TO ev_status_h.
-    ENDSELECT.
+    SELECT * FROM crm_jcds WHERE objnr = @iv_guid
+      INTO TABLE @ev_status_h.
 
-    "inactive status
+    "just move all status...
     SELECT * FROM crm_jest INTO TABLE @ev_status_db
     WHERE objnr = @iv_guid.
 
