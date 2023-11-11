@@ -18,7 +18,7 @@ There will be a new document created with a new number in a target system.
 + Ibase component (requieres mapping)
 + Custom fields from CUSTOMER_H (requires mapping)
 + Creation Information (Posting & Created Dates - Created by User)
-+ Transport (with option to move CTS_ID on managed system)
++ Transport (with option to move CTS_ID on managed system for not released tr)
 + Business Partners (requires mapping)
 + Reach Texts
 + Links to other documents (CRM)
@@ -32,6 +32,7 @@ There will be a new document created with a new number in a target system.
 ```diff
 - Test managment data (test plans) not moved
 - Not tested with Urgent transactions (they have there own task list, so transports will not be working after the move)
+- Released transports not changed in managed system
 - Cycles not moved and need to be created and mapped
 - Custom fields created with AET, so far supports only fields created in CUSTOMER_H
 - Move following tables content to have same categorisation ID`s:
