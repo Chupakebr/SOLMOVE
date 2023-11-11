@@ -77,17 +77,20 @@ TARGET   - Value in target system
 ```
 Folowing id are mandatory: GUID, ID, TYPE
 
-### Legend
+### Types
 You need to identify 2 custom gields with AET to store old GUID and ID of the document for reference:
+```
 GUID  - AET created field to store legacy GUID (Table CUSTOMER_H) CHAR32
 ID    - AET created field to store legacy ID (Table CUSTOMER_H)   CHAR10
-
+```
+```
 TYPE  - Mapping of transaction types (i.e. Table CRMD_ORDERADM_H~PROCESS_TYPE)
 BP    -  Business partner mapping (table but000~Partner)
 CYCLE - Mapping of cycles id types (i.e. Table CRMD_ORDERADM_H~OBJECT_ID)
 FILD  - Mapping between AET fields (so far only Table CUSTOMER_H is supported)
 IBASE - Ibase mapping (COMM_PRODUCT~PRODUCT_ID)
 ROOT  - Branch id`s mapping (Soldoc should be moved with standart Export/Import functionality) (SMUD_RNODE_T~ROOT_OCC)
+```
 
 ## How to obtain support
 This project is provided "as-is".
