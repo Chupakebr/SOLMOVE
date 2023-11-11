@@ -78,7 +78,7 @@ TARGET   - Value in target system
 Folowing id are mandatory: GUID, ID, TYPE
 
 ### Types
-You need to identify 2 custom gields with AET to store old GUID and ID of the document for reference:
+You need to identify 2 custom fields with AET to store old GUID and ID of the document for reference:
 ```
 GUID  - AET created field to store legacy GUID (Table CUSTOMER_H) CHAR32
 ID    - AET created field to store legacy ID (Table CUSTOMER_H)   CHAR10
