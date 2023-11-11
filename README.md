@@ -6,7 +6,7 @@ This program developed to:
 - Copy of existing transactions within same Solution manager.
 There will be a new document created with a new number in a target system.
 
-###The following content will be moved:
+### Following content will be moved:
 ```diff
 + Transaction types (requires mapping)
 + Description
@@ -28,7 +28,7 @@ There will be a new document created with a new number in a target system.
 + Multi-level category (With limitation that category ID are the same, requieres category move on a table level)
 + Log data (status, bp, priority and other change)
 ```
-###Known limitations:
+### Known limitations:
 ```diff
 - Test managment data (test plans) not moved
 - Not tested with Urgent transactions (they have there own task list)
