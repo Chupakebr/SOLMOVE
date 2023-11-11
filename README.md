@@ -34,6 +34,16 @@ There will be a new document created with a new number in a target system.
 - Not tested with Urgent transactions (they have there own task list)
 - Cycles not moved and need to be created and mapped
 - Custom fields created with AET, so far supports only fields created in CUSTOMER_H
+- Move following tables to have same categorisation ID`s:
+      CRMC_ERMS_CAT_OK
+      CRMC_ERMS_CAT_SP
+      CRMC_ERMS_CAT_LN
+      CRMC_ERMS_CAT_AS
+      CRMC_ERMS_CAT_AD
+      CRMC_ERMS_CAT_HI
+      CRMC_ERMS_CAT_CA
+      CRMC_ERMS_CAT_CT
+      CRMC_ERMS_CAT_CD
 ```
 
 ## Instalation
@@ -43,7 +53,7 @@ There will be a new document created with a new number in a target system.
 
 ## Utilisation
 1)  Sorce system: In transaction, SM30 (table ZSOLMOVE_MAPPING), maintain mapping values for the fields which require mapping
-2)  Sorce system: Run t-code SE38 program ZMOVE, with RFC destination to the target system
+2)  Sorce system: Run t-code SE38 program ZMOVE, with RFC destination to the target system (use "NONE" to create Documents in the same system)
 
 ## Mapping gidlines (table ZSOLMOVE_MAPPING)
 ```
@@ -68,8 +78,16 @@ TARGET   - Value in target system
 Folowing id are mandatory: GUID, ID, TYPE
 
 ### Legend
-BP -  Business partner mapping (table but000~Partner)
+You need to identify 2 custom gields with AET to store old GUID and ID of the document for reference:
+GUID  - AET created field to store legacy GUID (Table CUSTOMER_H) CHAR32
+ID    - AET created field to store legacy ID (Table CUSTOMER_H)   CHAR10
 
+TYPE  - Mapping of transaction types (i.e. Table CRMD_ORDERADM_H~PROCESS_TYPE)
+BP    -  Business partner mapping (table but000~Partner)
+CYCLE - Mapping of cycles id types (i.e. Table CRMD_ORDERADM_H~OBJECT_ID)
+FILD  - Mapping between AET fields (so far only Table CUSTOMER_H is supported)
+IBASE - Ibase mapping (COMM_PRODUCT~PRODUCT_ID)
+ROOT  - Branch id`s mapping (Soldoc should be moved with standart Export/Import functionality) (SMUD_RNODE_T~ROOT_OCC)
 
 ## How to obtain support
 This project is provided "as-is".
