@@ -186,6 +186,11 @@
      <DESCRIPT>Get custom WEBUI fields created with AET</DESCRIPT>
     </SEOCOMPOTX>
     <SEOCOMPOTX>
+     <CMPNAME>SET_PARTNERS</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Get custom WEBUI fields created with AET</DESCRIPT>
+    </SEOCOMPOTX>
+    <SEOCOMPOTX>
      <CMPNAME>SET_SLA</CMPNAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Set SLA (Activities)</DESCRIPT>
@@ -610,6 +615,18 @@
      <SCONAME>IT_CDPOS</SCONAME>
      <LANGU>E</LANGU>
      <DESCRIPT>Processing Logs</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>SET_PARTNERS</CMPNAME>
+     <SCONAME>EV_MESSAGE</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Processing log for document</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>SET_PARTNERS</CMPNAME>
+     <SCONAME>LT_PARTNER</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Transfer Table for Partners to Partner Processing</DESCRIPT>
     </SEOSUBCOTX>
     <SEOSUBCOTX>
      <CMPNAME>SET_SLA</CMPNAME>
