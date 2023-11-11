@@ -46,7 +46,7 @@ There will be a new document created with a new number in a target system.
 2)  Sorce system: Run t-code SE38 program ZMOVE, with RFC destination to the target system
 
 ## Mapping gidlines (table ZSOLMOVE_MAPPING)
-
+```
 Mapping example:
 Type    SUB_TYPE      SOURCE                  TARGET
 BP		                877	                    265
@@ -57,13 +57,14 @@ ID	    CUSTOMER_H		ZZAFLD000008
 IBASE		              7100000022	            7100000022
 ROOT		              051Ml4Nz7kUsirt8NjCZwG	051Ml4Nz7kUsirt8NjCZwG
 TYPE		              S1BR	                  S1BR
-
+```
 ### Columns
+```
 Type     - ID of the mapped content
 SUB_TYPE - sub table used for content (for AET created fields)
 SOURCE   - Value in source system
 TARGET   - Value in target system
-
+```
 Folowing id are mandatory: GUID, ID, TYPE
 
 ### Legend
