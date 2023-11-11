@@ -20,6 +20,11 @@ public section.
       !IT_CATEGORIES type CRMT_SUBJECT_WRK
     changing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API .
+  class-methods SET_CATEGORIES_DB
+    importing
+      !IV_CATEGORIES type CRMD_SRV_SUBJECT
+    changing
+      !IV_1O_API type ref to CL_AGS_CRM_1O_API .
   class-methods GET_APPROVAL
     importing
       !IV_GUID type CRMT_OBJECT_GUID
@@ -271,7 +276,8 @@ public section.
     importing
       !IV_1O_API type ref to CL_AGS_CRM_1O_API
     exporting
-      !RT_RESULT type CRMT_SUBJECT_WRK .
+      !RT_RESULT type CRMT_SUBJECT_WRK
+      !RT_RESULT_DB type CRMD_SRV_SUBJECT .
 protected section.
 private section.
 ENDCLASS.
@@ -934,6 +940,15 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 *         ev_message =
         .
     ENDIF.
+
+    IF iv_documentprops-cat_db IS NOT INITIAL.
+      CALL METHOD zcl_solmove_helper=>set_categories_db
+        EXPORTING
+          iv_categories = iv_documentprops-cat_db
+        CHANGING
+          iv_1o_api     = lo_cd.
+    ENDIF.
+
     "update status and status change history on DB level.
     IF iv_documentprops-stat_hist_table IS NOT INITIAL OR iv_documentprops-status_db IS NOT INITIAL.
       CALL METHOD zcl_solmove_helper=>set_status_db
@@ -978,7 +993,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           oref        TYPE REF TO cx_root,
           text        TYPE string.
 
-    IF iv_doc_id IS NOT INITIAL.
+    IF iv_doc_id-value IS NOT INITIAL AND iv_doc_id-target_field IS NOT INITIAL.
       fldname = iv_doc_id-target_field.
       CONCATENATE fldname '=' iv_doc_id-value INTO cond_syntax SEPARATED BY space.
 
@@ -997,7 +1012,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    IF iv_doc_guid IS NOT INITIAL AND ev_guid IS INITIAL.
+    IF iv_doc_guid-target_field IS NOT INITIAL AND ev_guid IS INITIAL.
       fldname = iv_doc_guid-target_field.
       CONCATENATE fldname ' = ''' iv_doc_guid-value '''' INTO cond_syntax.
       TRY.
@@ -1237,23 +1252,39 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   METHOD get_categories.
 
     DATA: lv_cat    TYPE crmt_subject_wrk.
+    DATA: lv_guid   TYPE crmt_object_guid.
 
     CALL METHOD iv_1o_api->get_subject
       IMPORTING
-        es_subject = rt_result.
-*       et_subject =
-*  EXCEPTIONS
-*       document_not_found   = 1
-*       error_occurred       = 2
-*       document_locked      = 3
-*       no_change_authority  = 4
-*       no_display_authority = 5
-*       no_change_allowed    = 6
-*       others     = 7
-    .
+        es_subject           = rt_result
+        "et_subject =
+      EXCEPTIONS
+        document_not_found   = 1
+        error_occurred       = 2
+        document_locked      = 3
+        no_change_authority  = 4
+        no_display_authority = 5
+        no_change_allowed    = 6
+        OTHERS               = 7.
     IF sy-subrc <> 0.
-* Implement suitable error handling here
+      "RETURN.
     ENDIF.
+
+    lv_guid = iv_1o_api->get_guid( ).
+
+    SELECT SINGLE * FROM crmd_link
+    WHERE guid_hi   = @lv_guid
+    AND objtype_hi  = '05'
+    AND objtype_set = '29'
+    INTO @DATA(lv_link).
+
+    SELECT SINGLE guid FROM crmd_srv_osset
+    WHERE guid_set = @lv_link-guid_set
+    INTO @DATA(ref_guid).
+
+    SELECT SINGLE * FROM crmd_srv_subject
+    WHERE guid_ref = @ref_guid
+    INTO @rt_result_db.
 
   ENDMETHOD.
 
@@ -1368,15 +1399,19 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
 
     LOOP AT lt_docs INTO ls_doc.
-      IF ls_doc-objkey_b = lv_guid AND ls_doc-objkey_a = lv_cycl_guid.
-        IF lv_cycle_n IS NOT INITIAL.
-          ls_doc-objkey_a = lv_cycle_n.
-        ELSE.
-          CONTINUE.
+      IF ls_doc-objkey_b = lv_guid.
+        IF ls_doc-objkey_a = lv_cycl_guid.
+          IF lv_cycle_n IS NOT INITIAL.
+            ls_doc-objkey_a = lv_cycle_n.
+          ELSE.
+            "cycle not mapped in Ztable, please do the mapping
+          ENDIF.
         ENDIF.
-      ELSEIF ls_doc-objkey_b = lv_guid.
-        "we trying to mapp only ls_doc-objkey_b so if obj_b is document itself, we skip this
-        CONTINUE.
+        "means that we need to mapp objkey_a
+        CLEAR ls_doc-objkey_b.
+      ELSEIF  ls_doc-objkey_a = lv_guid.
+        "means that we need to mapp objkey_b
+        CLEAR ls_doc-objkey_a.
       ENDIF.
       APPEND ls_doc TO et_docs.
     ENDLOOP.
@@ -1542,9 +1577,10 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     "get multi level categories
     CALL METHOD zcl_solmove_helper=>get_categories
       EXPORTING
-        iv_1o_api = lo_api_object
+        iv_1o_api    = lo_api_object
       IMPORTING
-        rt_result = lt_doc_properties-categories.
+        rt_result    = lt_doc_properties-categories
+        rt_result_db = lt_doc_properties-cat_db.
 
     "get context
     CALL METHOD zcl_solmove_helper=>get_context
@@ -1585,6 +1621,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         et_sla_db_2    = lt_doc_properties-sla_db
         et_appointment = lt_doc_properties-appointment_t.
 
+    "get logs
     CALL METHOD zcl_solmove_helper=>get_log
       EXPORTING
         iv_1o_api = lo_api_object
@@ -2302,7 +2339,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     ENDLOOP.
 
     "modify CRMD_APPROVAL_S table
-    MODIFY crmd_approval_s FROM TABLE lt_approval_t .
+    MODIFY crmd_approval_s FROM TABLE lt_approval_t.
   ENDMETHOD.
 
 
@@ -2485,6 +2522,35 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD set_categories_db.
+    DATA: lv_guid        TYPE crmt_object_guid.
+
+    lv_guid = iv_1o_api->get_guid( ).
+
+    SELECT SINGLE * FROM crmd_link
+    WHERE guid_hi = @lv_guid
+    AND objtype_hi  = '05'
+    AND objtype_set = '29'
+    INTO @DATA(lv_link).
+
+    SELECT SINGLE guid FROM crmd_srv_osset
+    WHERE guid_set  = @lv_link-guid_set
+    INTO @DATA(ref_guid).
+
+    SELECT SINGLE * FROM crmd_srv_subject WHERE guid_ref = @ref_guid INTO @DATA(lv_guig_ref).
+    IF sy-subrc = 0.
+      lv_guig_ref-asp_id = iv_categories-asp_id.
+      lv_guig_ref-cat_id = iv_categories-cat_id.
+    ELSE.
+      DATA lv_cat TYPE crmd_srv_subject.
+      MOVE-CORRESPONDING iv_categories TO lv_guig_ref.
+      lv_guig_ref-guid_ref = ref_guid.
+    ENDIF.
+    MODIFY crmd_srv_subject FROM lv_guig_ref.
+
+  ENDMETHOD.
+
+
   METHOD set_context.
 
     DATA: ls_cr_context         TYPE tsocm_cr_context,
@@ -2630,31 +2696,41 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
     DATA: lv_doc        TYPE crmt_doc_flow_wrk,
           lv_doc_fl     TYPE crmt_doc_flow_comt,
           lv_doc_fl_e   TYPE crmt_doc_flow_extd,
+          lt_docs_c     TYPE crmt_doc_flow_wrkt,
           lv_doc_l      TYPE crmt_doc_flow_com,
           lv_log_handle TYPE balloghndl,
           lv_doc_guid   TYPE zcustom_fields,
           lv_cycl_guid  TYPE crmt_object_guid,
-          lv_found_guid TYPE crmt_object_guid.
+          lv_found_guid TYPE crmt_object_guid,
+          lv_found      TYPE boolean.
 
     lv_doc_guid = iv_doc_guid.
 
-    LOOP AT lt_docs INTO lv_doc.
-      CLEAR  lv_found_guid.
+    "will check to avoid duplicates
+    CALL METHOD iv_1o_api->get_doc_flow
+      IMPORTING
+        et_doc_flow          = lt_docs_c
+      EXCEPTIONS
+        document_not_found   = 1
+        error_occurred       = 2
+        document_locked      = 3
+        no_change_authority  = 4
+        no_display_authority = 5
+        no_change_allowed    = 6
+        OTHERS               = 7.
+    IF sy-subrc <> 0.
+*     Implement suitable error handling here
+    ENDIF.
 
+    LOOP AT lt_docs INTO lv_doc.
+      lv_found = abap_false.
+      CLEAR: lv_found_guid, lv_doc_guid-value, lv_doc_fl_e.
       "build link
       MOVE-CORRESPONDING lv_doc TO lv_doc_fl_e.
-      "link to cycle
-      IF strlen( lv_doc_fl_e-objkey_a ) = 10.
-        SELECT SINGLE guid FROM crmd_orderadm_h WHERE object_id = @lv_doc_fl_e-objkey_a
-        INTO @lv_cycl_guid.
-        IF lv_cycl_guid IS NOT INITIAL.
-          lv_doc_fl_e-objkey_a = lv_cycl_guid.
-          lv_doc_fl_e-objkey_b = iv_guid. " guid of the doc
-          APPEND lv_doc_fl_e TO lv_doc_l-doc_link.
-        ENDIF.
-      ELSE.
+      IF lv_doc_fl_e-objkey_b IS NOT INITIAL.
+        "search mapping for obj b
+        lv_doc_fl_e-objkey_a = iv_guid. " guid of the doc
         lv_doc_guid-value = lv_doc_fl_e-objkey_b.
-
         CALL METHOD zcl_solmove_helper=>find_doc
           EXPORTING
 *           iv_doc_id     =
@@ -2669,11 +2745,53 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
           CONCATENATE 'DOCFLOW skiped: GUID field:' lv_doc_guid-target_table lv_doc_guid-target_field 'missing in target.' INTO  ev_message SEPARATED BY space.
           RETURN.
         ENDIF.
-        IF  lv_found_guid IS NOT INITIAL.
-          lv_doc_fl_e-objkey_a = iv_guid.
+        IF lv_found_guid IS NOT INITIAL.
           lv_doc_fl_e-objkey_b = lv_found_guid. " guid of the doc
-          APPEND lv_doc_fl_e TO lv_doc_l-doc_link.
+          lv_found = abap_true.
         ENDIF.
+
+      ELSEIF lv_doc_fl_e-objkey_a IS NOT INITIAL.
+        lv_doc_fl_e-objkey_b = iv_guid. " guid of the doc
+        "link to cycle
+        IF strlen( lv_doc_fl_e-objkey_a ) = 10.
+          SELECT SINGLE guid FROM crmd_orderadm_h WHERE object_id = @lv_doc_fl_e-objkey_a
+          INTO @lv_cycl_guid.
+          IF lv_cycl_guid IS NOT INITIAL.
+            lv_doc_fl_e-objkey_a = lv_cycl_guid.
+            lv_found = abap_true.
+          ENDIF.
+        ELSE.
+          "search mapping for obj a
+          lv_doc_guid-value = lv_doc_fl_e-objkey_a.
+          CALL METHOD zcl_solmove_helper=>find_doc
+            EXPORTING
+*             iv_doc_id     =
+              iv_doc_guid   = lv_doc_guid
+*             iv_type       =
+            IMPORTING
+              ev_guid       = lv_found_guid
+            EXCEPTIONS
+              error_mapping = 1
+              OTHERS        = 2.
+          IF sy-subrc <> 0.
+            CONCATENATE 'DOCFLOW skiped: GUID field:' lv_doc_guid-target_table lv_doc_guid-target_field 'missing in target.' INTO  ev_message SEPARATED BY space.
+            RETURN.
+          ENDIF.
+          IF lv_found_guid IS NOT INITIAL.
+            lv_doc_fl_e-objkey_a = lv_found_guid.
+            lv_found = abap_true.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      LOOP AT lt_docs_c INTO DATA(lv_doc_c)
+        WHERE objkey_a = lv_doc_fl_e-objkey_a
+        AND   objkey_b = lv_doc_fl_e-objkey_b.
+        lv_found = abap_false.
+      ENDLOOP.
+
+      IF lv_found = abap_true.
+        APPEND lv_doc_fl_e TO lv_doc_l-doc_link.
       ENDIF.
     ENDLOOP.
 
@@ -3068,29 +3186,92 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
   METHOD set_soldoc.
     DATA:
-      lv_smud_context     TYPE        smud_context_occ,
-      ls_parameters       TYPE        ags_mk_s_param,
-      lt_parameters       TYPE        ags_mk_tt_param,
-      lv_smud_occurrences TYPE        zsmud_occurrence,
-      lv_line             TYPE        i.
+      lv_smud_context       TYPE smud_context_occ,
+      ls_parameters         TYPE ags_mk_s_param,
+      lt_parameters         TYPE ags_mk_tt_param,
+      lv_smud_occurrences   TYPE zsmud_occurrence,
+      lt_smud_occurrences_c TYPE cl_ags_crm_1o_api=>tt_smud_occurrence,
+      lv_line               TYPE i,
+      lv_skip               TYPE boolean,
+      ls_customer_h         TYPE crmt_orderadm_h_wrk.
+
+    DATA(lv_guid) = iv_1o_api->get_guid( ).
+
+    CALL METHOD iv_1o_api->get_orderadm_h
+      IMPORTING
+        es_orderadm_h        = ls_customer_h
+      EXCEPTIONS
+        document_not_found   = 1
+        error_occurred       = 2
+        document_locked      = 3
+        no_change_authority  = 4
+        no_display_authority = 5
+        no_change_allowed    = 6
+        OTHERS               = 7.
+    IF sy-subrc <> 0.
+      RETURN.
+    ENDIF.
+
+    "get occ_ids
+    iv_1o_api->get_smud_occurrences(
+      IMPORTING
+        et_smud_occurrences = lt_smud_occurrences_c ).
+
+    SELECT SINGLE i~implementation
+    FROM tsocm_proxy_impl AS i
+    WHERE i~transaction_type = @ls_customer_h-process_type INTO @DATA(lv_imp).
 
     LOOP AT it_occ_ids INTO lv_smud_occurrences.
+      lv_skip = 0.
 
-      CLEAR: lv_smud_context, lt_parameters.
-      CONCATENATE lv_smud_occurrences-occ_id lv_smud_occurrences-root_occ lv_smud_occurrences-scope_id "<fs_smud_occurrences>-show_inactive
-      INTO lv_smud_context.
+      "check if soldoc exists.
+      LOOP AT lt_smud_occurrences_c INTO DATA(lv_smud_c) WHERE occ_id = lv_smud_occurrences-occ_id.
+        lv_skip = 1.
+      ENDLOOP.
 
-      ls_parameters-name = 'SMUD_CONTEXT'.
-      ls_parameters-value = lv_smud_context.
-      APPEND ls_parameters TO lt_parameters.
+      IF lv_skip = 0.
+        IF lv_imp = cl_ags_work_bp_info=>c_proxy_cl_nor_corr         "Normal Change
+        OR lv_imp = cl_ags_work_bp_info=>c_proxy_cl_sap_nor_corr     "Normal Change
+        OR lv_imp = cl_ags_work_bp_info=>c_proxy_cl_non_sap_change   "General Change
+        OR lv_imp = cl_ags_work_bp_info=>c_proxy_cl_sap_urg_corr     "Urgent Correction
+        OR lv_imp = cl_ags_work_bp_info=>c_proxy_cl_stand_change     "Standard Change
+        OR lv_imp = cl_ags_work_bp_info=>c_proxy_cl_sap_admin .      "Admin Change
+          "Works for change documents
+          "set smud context
+          iv_1o_api->set_smud_context_occ(
+                  EXPORTING
+                    iv_smud_context_occ = CONV #( lv_smud_occurrences-occ_id && lv_smud_occurrences-root_occ )
+                    iv_sbom_type        = cl_ags_crm_smud_util=>cs_sbom_type-cd
+                  EXCEPTIONS
+                    invalid_parameters  = 1
+                    OTHERS              = 2 ).
 
-      lv_line = lv_line + 1.
+          iv_1o_api->save_smud_occurrences(
+          EXCEPTIONS
+            error_occurred = 1
+            OTHERS         = 2 ).
 
-      CALL METHOD cl_ags_crm_1o_api=>write_cache
-        EXPORTING
-          it_parameters = lt_parameters
-          iv_guid       = iv_guid
-          iv_line       = lv_line.
+          IF sy-subrc <> 0.
+          ENDIF.
+          "Works for other documents
+        ELSE.
+          CLEAR: lv_smud_context, lt_parameters.
+          CONCATENATE lv_smud_occurrences-occ_id lv_smud_occurrences-root_occ lv_smud_occurrences-scope_id "<fs_smud_occurrences>-show_inactive
+          INTO lv_smud_context.
+
+          ls_parameters-name = 'SMUD_CONTEXT'.
+          ls_parameters-value = lv_smud_context.
+          APPEND ls_parameters TO lt_parameters.
+
+          lv_line = lv_line + 1.
+
+          CALL METHOD cl_ags_crm_1o_api=>write_cache
+            EXPORTING
+              it_parameters = lt_parameters
+              iv_guid       = iv_guid
+              iv_line       = lv_line.
+        ENDIF.
+      ENDIF.
 
     ENDLOOP.
   ENDMETHOD.
