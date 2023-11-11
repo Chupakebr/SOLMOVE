@@ -89,7 +89,7 @@ BP    - Business partner mapping (table but000~Partner)
 CYCLE - Mapping of cycles id types (i.e. Table CRMD_ORDERADM_H~OBJECT_ID)
 FILD  - Mapping between AET fields (so far only Table CUSTOMER_H is supported)
 IBASE - Ibase mapping (COMM_PRODUCT~PRODUCT_ID)
-ROOT  - Branch id`s mapping (Soldoc should be moved with standart Export/Import functionality) (SMUD_RNODE_T~ROOT_OCC)
+ROOT  - Branch id`s mapping (Soldoc should be moved with standart Export/Import functionality, and OCC_ID should be the same) (SMUD_RNODE_T~ROOT_OCC)
 ```
 
 ## How to obtain support
