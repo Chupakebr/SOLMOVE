@@ -58,7 +58,7 @@ There will be a new document created with a new number in a target system.
 ## Mapping gidlines (table ZSOLMOVE_MAPPING)
 ```
 Mapping example:
-TYPE SUB_TYPE    SOURCE                   TARGET
+TYPE   SUB_TYPE  SOURCE                   TARGET
 BP               877                      265
 CYCLE            8000003237               8000003238
 FILD  CUSTOMER_H ZZ_JIRA_ID               ZZ_JIRA_ID
