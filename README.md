@@ -58,15 +58,15 @@ There will be a new document created with a new number in a target system.
 ## Mapping gidlines (table ZSOLMOVE_MAPPING)
 ```
 Mapping example:
-TYPE SUB_TYPE SOURCE TARGET
-BP   877 265
-CYCLE   8000003237 8000003238
-FILD CUSTOMER_H ZZ_JIRA_ID ZZ_JIRA_ID
-GUID CUSTOMER_H ZZAFLD00000B
-ID CUSTOMER_H ZZAFLD000008
-IBASE   7100000022 7100000022
-ROOT   051Ml4Nz7kUsirt8NjCZwG 051Ml4Nz7kUsirt8NjCZwG
-TYPE   S1BR S1BR
+TYPE SUB_TYPE    SOURCE                   TARGET
+BP               877 265
+CYCLE            8000003237               8000003238
+FILD  CUSTOMER_H ZZ_JIRA_ID               ZZ_JIRA_ID
+GUID  CUSTOMER_H ZZAFLD00000B
+ID    CUSTOMER_H ZZAFLD000008
+IBASE 7100000022 7100000022
+ROOT             051Ml4Nz7kUsirt8NjCZwG   051Ml4Nz7kUsirt8NjCZwG
+TYPE             S1BR                     S1BR
 ```
 ### Columns
 ```
@@ -85,7 +85,7 @@ ID    - AET created field to store legacy ID (Table CUSTOMER_H)   CHAR10
 ```
 ```
 TYPE  - Mapping of transaction types (i.e. Table CRMD_ORDERADM_H~PROCESS_TYPE)
-BP    -  Business partner mapping (table but000~Partner)
+BP    - Business partner mapping (table but000~Partner)
 CYCLE - Mapping of cycles id types (i.e. Table CRMD_ORDERADM_H~OBJECT_ID)
 FILD  - Mapping between AET fields (so far only Table CUSTOMER_H is supported)
 IBASE - Ibase mapping (COMM_PRODUCT~PRODUCT_ID)
