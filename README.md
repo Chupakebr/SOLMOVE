@@ -1,6 +1,10 @@
-# SOLMOVE
-Move Charm/ITSM Documents from one Solution Manager 7.2 to another instance of Solution Manager. 
-There will be a new document created with a new number.
+# Solution Manager Document Copy Tool
+
+## Description
+This program developed to:
+- Move Charm/ITSM Documents from one Solution Manager 7.2 to another instance of Solution Manager.
+- Copy of existing transactions within same Solution manager.
+There will be a new document created with a new number in a target system.
 
 The following content will be moved:
 ```diff
@@ -14,22 +18,34 @@ The following content will be moved:
 + Ibase component (requieres mapping)
 + Custom fields from CUSTOMER_H (requires mapping)
 + Creation Information (Posting & Created Dates - Created by User)
-+ Transport (no changes in the managed system, just table entrys)
++ Transport (with option to move CTS_ID on managed system)
 + Business Partners (requires mapping)
 + Reach Texts
 + Links to other documents (CRM)
 + Scope
 + SLA
 + Approval procedure
-+ Multi-level category (requires mapping)
-- Test managment data (test plans)
++ Multi-level category (With limitation that category ID are the same, requieres category move on a table level)
++ Log data (status, bp, priority and other change)
+Known limitations
+- Test managment data (test plans) not moved
+- Not tested with Urgent transactions (they have there own task list)
+- Cycles not moved and need to be created and mapped
 ```
 
-# Instalation
+## Instalation
 1) Install abapgit (https://abapgit.org/) in your source and target Solution manager
 2) Pull this repository into your systems (source and target)
 3) Create a trusted RFC destination from the source system to the target
 
-# Utilisation
+## Utilisation
 1)  Sorce system: In transaction, SM30 (table ZSOLMOVE_MAPPING), maintain mapping values for the fields which require mapping
-2)  Sorce system: Run t-code SE38 program ZMOVE, with RFC destination to the target system 
+2)  Sorce system: Run t-code SE38 program ZMOVE, with RFC destination to the target system
+
+## How to obtain support
+This project is provided "as-is".
+
+## License
+Copyright (c) 2023 SAP SE or an SAP affiliate company. All rights reserved.
+This file is licensed under the Apache Software License, v. 2 except as noted otherwise in the [LICENSE](https://github.com/SAP/solman-fb-jira-addon/blob/master/LICENSE) file.
+
