@@ -14,7 +14,7 @@ The following content will be moved:
 + Status (with status change history CRM_JCDS)
 + Attachments
 + Soldoc content
-+ Cycles (requieres mapping)
++ Cycles assingment (requieres mapping)
 + Ibase component (requieres mapping)
 + Custom fields from CUSTOMER_H (requires mapping)
 + Creation Information (Posting & Created Dates - Created by User)
@@ -31,6 +31,7 @@ Known limitations
 - Test managment data (test plans) not moved
 - Not tested with Urgent transactions (they have there own task list)
 - Cycles not moved and need to be created and mapped
+- Custom fields created with AET, so far supports only fields created in CUSTOMER_H
 ```
 
 ## Instalation
@@ -41,6 +42,31 @@ Known limitations
 ## Utilisation
 1)  Sorce system: In transaction, SM30 (table ZSOLMOVE_MAPPING), maintain mapping values for the fields which require mapping
 2)  Sorce system: Run t-code SE38 program ZMOVE, with RFC destination to the target system
+
+## Mapping gidlines (table ZSOLMOVE_MAPPING)
+
+Mapping example:
+Type    SUB_TYPE      SOURCE                  TARGET
+BP		                877	                    265
+CYCLE		              8000003237	            8000003238
+FILD	  CUSTOMER_H	  ZZ_JIRA_ID	            ZZ_JIRA_ID
+GUID	  CUSTOMER_H		ZZAFLD00000B
+ID	    CUSTOMER_H		ZZAFLD000008
+IBASE		              7100000022	            7100000022
+ROOT		              051Ml4Nz7kUsirt8NjCZwG	051Ml4Nz7kUsirt8NjCZwG
+TYPE		              S1BR	                  S1BR
+
+### Columns
+Type     - ID of the mapped content
+SUB_TYPE - sub table used for content (for AET created fields)
+SOURCE   - Value in source system
+TARGET   - Value in target system
+
+Folowing id are mandatory: GUID, ID, TYPE
+
+### Legend
+BP -  Business partner mapping (table but000~Partner)
+
 
 ## How to obtain support
 This project is provided "as-is".
