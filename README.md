@@ -34,7 +34,7 @@ There will be a new document created with a new number in a target system.
 - Not tested with Urgent transactions (they have there own task list)
 - Cycles not moved and need to be created and mapped
 - Custom fields created with AET, so far supports only fields created in CUSTOMER_H
-- Move following tables to have same categorisation ID`s:
+- Move following tables content to have same categorisation ID`s:
       CRMC_ERMS_CAT_OK
       CRMC_ERMS_CAT_SP
       CRMC_ERMS_CAT_LN
