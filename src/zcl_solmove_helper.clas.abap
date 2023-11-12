@@ -95,6 +95,7 @@ public section.
       !IV_DOC_GUID type ZCUSTOM_FIELDS
       !LT_DOCS type CRMT_DOC_FLOW_WRKT
       !IV_GUID type CRMT_OBJECT_GUID
+      !IV_CYCLE type CRMT_OBJECT_ID_DB optional
     exporting
       !EV_MESSAGE type TDLINE .
   class-methods SET_TEXTS
@@ -781,30 +782,32 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
 
         "set transports
         IF iv_documentprops-transports IS NOT INITIAL.
-          CALL METHOD zcl_solmove_helper=>set_tr_db
-            EXPORTING
-              iv_guid                       = ls_orderadm_h-guid
-              iv_transports                 = iv_documentprops-transports
-              iv_change_id                  = ls_orderadm_h-object_id
-              iv_tr_move                    = iv_documentprops-tr_move
-            EXCEPTIONS
-              error_tr_already_registered   = 1
-              error_tr_not_added            = 2
-              error_tr_not_changed_in_mnged = 3
-              OTHERS                        = 4.
-          IF sy-subrc <> 0.
-            CASE sy-subrc.
-              WHEN 1.
-                lv_message = 'Error: Transports already mapped in target system'.
-                APPEND lv_message TO ev_message.
-              WHEN 3.
-                lv_message = 'Error: Transports not updated in mnged system'.
-                APPEND lv_message TO ev_message.
-              WHEN OTHERS.
-                lv_message = 'Error: could not add transports to the created doc'.
-                APPEND lv_message TO ev_message.
-            ENDCASE.
-          ENDIF.
+          lv_message = 'I will not tuch transports'.
+          APPEND lv_message TO ev_message.
+*          CALL METHOD zcl_solmove_helper=>set_tr_db
+*            EXPORTING
+*              iv_guid                       = ls_orderadm_h-guid
+*              iv_transports                 = iv_documentprops-transports
+*              iv_change_id                  = ls_orderadm_h-object_id
+*              iv_tr_move                    = iv_documentprops-tr_move
+*            EXCEPTIONS
+*              error_tr_already_registered   = 1
+*              error_tr_not_added            = 2
+*              error_tr_not_changed_in_mnged = 3
+*              OTHERS                        = 4.
+*          IF sy-subrc <> 0.
+*            CASE sy-subrc.
+*              WHEN 1.
+*                lv_message = 'Error: Transports already mapped in target system'.
+*                APPEND lv_message TO ev_message.
+*              WHEN 3.
+*                lv_message = 'Error: Transports not updated in mnged system'.
+*                APPEND lv_message TO ev_message.
+*              WHEN OTHERS.
+*                lv_message = 'Error: could not add transports to the created doc'.
+*                APPEND lv_message TO ev_message.
+*            ENDCASE.
+*          ENDIF.
         ENDIF.
       ENDIF.
 
@@ -846,6 +849,7 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
             iv_doc_guid = iv_documentprops-object_guid
             lt_docs     = iv_documentprops-doc_flow
             iv_guid     = ls_orderadm_h-guid
+            iv_cycle    = iv_documentprops-cycle
           IMPORTING
             ev_message  = lv_message.
         IF lv_message IS NOT INITIAL.
@@ -1546,14 +1550,14 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       APPEND lv_message TO ev_message.
     ENDIF.
 
-    "get transports
-    IF lt_doc_properties-cycle IS NOT INITIAL.
-      CALL METHOD zcl_solmove_helper=>get_tr
-        EXPORTING
-          iv_guid       = iv_guid
-        IMPORTING
-          ev_transports = lt_doc_properties-transports.
-    ENDIF.
+*    "get transports
+*    IF lt_doc_properties-cycle IS NOT INITIAL.
+*      CALL METHOD zcl_solmove_helper=>get_tr
+*        EXPORTING
+*          iv_guid       = iv_guid
+*        IMPORTING
+*          ev_transports = lt_doc_properties-transports.
+*    ENDIF.
 
     " get custom fields for WEB UI
     CALL METHOD zcl_solmove_helper=>get_webui_fields
@@ -2728,6 +2732,16 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       "build link
       MOVE-CORRESPONDING lv_doc TO lv_doc_fl_e.
       IF lv_doc_fl_e-objkey_b IS NOT INITIAL.
+        IF strlen( lv_doc_fl_e-objkey_b ) = 10.
+          "tasklist link
+          SELECT SINGLE tasklist_id FROM aic_release_cycl INTO @DATA(lv_tasklist)
+          WHERE release_crm_id = @iv_cycle.
+          IF lv_tasklist IS NOT INITIAL.
+            lv_doc_fl_e-objkey_b = lv_tasklist.
+            lv_found = abap_true.
+          ENDIF.
+        ENDIF.
+
         "search mapping for obj b
         lv_doc_fl_e-objkey_a = iv_guid. " guid of the doc
         lv_doc_guid-value = lv_doc_fl_e-objkey_b.
@@ -3193,7 +3207,9 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
       lt_smud_occurrences_c TYPE cl_ags_crm_1o_api=>tt_smud_occurrence,
       lv_line               TYPE i,
       lv_skip               TYPE boolean,
-      ls_customer_h         TYPE crmt_orderadm_h_wrk.
+      ls_customer_h         TYPE crmt_orderadm_h_wrk,
+      lv_sbom_type          TYPE smude_app_type
+      .
 
     DATA(lv_guid) = iv_1o_api->get_guid( ).
 
@@ -3238,23 +3254,16 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
         OR lv_imp = cl_ags_work_bp_info=>c_proxy_cl_sap_admin .      "Admin Change
           "Works for change documents
           "set smud context
-          iv_1o_api->set_smud_context_occ(
-                  EXPORTING
-                    iv_smud_context_occ = CONV #( lv_smud_occurrences-occ_id && lv_smud_occurrences-root_occ )
-                    iv_sbom_type        = cl_ags_crm_smud_util=>cs_sbom_type-cd
-                  EXCEPTIONS
-                    invalid_parameters  = 1
-                    OTHERS              = 2 ).
-
-          iv_1o_api->save_smud_occurrences(
-          EXCEPTIONS
-            error_occurred = 1
-            OTHERS         = 2 ).
-
-          IF sy-subrc <> 0.
-          ENDIF.
+          lv_sbom_type = cl_ags_crm_smud_util=>cs_sbom_type-cd.
           "Works for other documents
-        ELSE.
+        ELSEIF lv_imp = cl_ags_work_bp_info=>c_proxy_incident_doc.  "incedents
+          lv_sbom_type = cl_ags_crm_smud_util=>cs_sbom_type-inc.
+        ELSEIF lv_imp = cl_ags_work_bp_info=>c_proxy_cl_busi_req. "BR
+          lv_sbom_type = cl_ags_crm_smud_util=>cs_sbom_type-br.
+        ELSEIF lv_imp = cl_ags_work_bp_info=>c_proxy_cl_req    "RFC
+          OR lv_imp = cl_ags_work_bp_info=>c_proxy_cl_it_req.  "ITREQ
+          lv_sbom_type = cl_ags_crm_smud_util=>cs_sbom_type-cr.
+        ELSE. "to check if this works at all?
           CLEAR: lv_smud_context, lt_parameters.
           CONCATENATE lv_smud_occurrences-occ_id lv_smud_occurrences-root_occ lv_smud_occurrences-scope_id "<fs_smud_occurrences>-show_inactive
           INTO lv_smud_context.
@@ -3270,6 +3279,23 @@ CLASS ZCL_SOLMOVE_HELPER IMPLEMENTATION.
               it_parameters = lt_parameters
               iv_guid       = iv_guid
               iv_line       = lv_line.
+        ENDIF.
+        IF lv_sbom_type IS NOT INITIAL.
+          iv_1o_api->set_smud_context_occ(
+                  EXPORTING
+                    iv_smud_context_occ = CONV #( lv_smud_occurrences-occ_id && lv_smud_occurrences-root_occ )
+                    iv_sbom_type        = lv_sbom_type
+                  EXCEPTIONS
+                    invalid_parameters  = 1
+                    OTHERS              = 2 ).
+
+          iv_1o_api->save_smud_occurrences(
+          EXCEPTIONS
+            error_occurred = 1
+            OTHERS         = 2 ).
+
+          IF sy-subrc <> 0.
+          ENDIF.
         ENDIF.
       ENDIF.
 
