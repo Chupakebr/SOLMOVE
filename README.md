@@ -4,7 +4,9 @@
 This program developed to:
 - Move Charm/ITSM Documents from one Solution Manager 7.2 to another instance of Solution Manager.
 - Copy of existing transactions within same Solution manager.
-There will be a new document created with a new number in a target system. Copy speed ~1 doc/sec
+
+There will be a new document created with a new number in a target system.
+Copy speed ~1 doc/sec
 
 ## Following content will be moved:
 ```diff
