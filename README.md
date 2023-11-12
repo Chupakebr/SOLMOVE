@@ -78,7 +78,6 @@ SUB_TYPE - sub table used for content (for AET created fields)
 SOURCE   - Value in source system
 TARGET   - Value in target system
 ```
-Folowing id are mandatory: GUID, ID, TYPE
 
 ### Types
 You need to identify 2 custom fields with AET to store old GUID and ID of the document for reference:
@@ -94,7 +93,7 @@ FILD  - Mapping between AET fields (so far only Table CUSTOMER_H is supported)
 IBASE - Ibase mapping (COMM_PRODUCT~PRODUCT_ID)
 ROOT  - Branch id`s mapping (Soldoc should be moved with standart Export/Import functionality, and OCC_ID should be the same) (SMUD_RNODE_T~ROOT_OCC)
 ```
-
+Folowing Types are mandatory for report execution: GUID, ID, TYPE
 ## How to obtain support
 This project is provided "as-is".
 
